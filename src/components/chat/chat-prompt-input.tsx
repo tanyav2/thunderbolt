@@ -31,6 +31,9 @@ import { ContextUsageIndicator } from '../context-usage-indicator'
 import { PromptInput } from '../ui/prompt-input'
 import { ChatModePicker } from './chat-mode-picker'
 import { ChatModelPicker } from './chat-model-picker'
+import { VerificationCenterModal } from './verification-center-modal'
+import { VerificationStatusChip } from './verification-status-chip'
+import { useTinfoilVerification } from '@/hooks/use-tinfoil-verification'
 
 /**
  * Extract a human-readable display string from a connection error.
@@ -104,6 +107,13 @@ export const ChatPromptInput = forwardRef<ChatPromptInputRef, ChatPromptInputPro
     } = useCurrentChatSession()
 
     const { messages, status, stop, sendMessage } = useChat({ chat: chatInstance })
+
+    // Verification only applies to built-in agents — ACP agents don't route
+    // through the selected model.
+    const activeTinfoilModel = selectedAgent.type === 'built-in' ? selectedModel : null
+    const verification = useTinfoilVerification(activeTinfoilModel)
+    const [verifierOpen, setVerifierOpen] = useState(false)
+    const sendBlockedByVerification = activeTinfoilModel?.provider === 'tinfoil' && verification.status !== 'verified'
 
     const { skills: library } = useLibrarySkills()
     const { isEnabled } = useEnabledSkills()
@@ -288,6 +298,13 @@ export const ChatPromptInput = forwardRef<ChatPromptInputRef, ChatPromptInputPro
           return
         }
 
+        // Don't send plaintext to an enclave we haven't verified — open the
+        // Verification Center so the user can inspect the proof or retry.
+        if (sendBlockedByVerification) {
+          setVerifierOpen(true)
+          return
+        }
+
         if (isOverflowing) {
           handleShowOverflowModal(selectedModel, textToSend.length, messages.length + 1)
           return
@@ -356,6 +373,8 @@ export const ChatPromptInput = forwardRef<ChatPromptInputRef, ChatPromptInputPro
             <ChatModelPicker />
           </>
         )}
+        {/* Rendered in every connection state; self-hides for non-Tinfoil models. */}
+        <VerificationStatusChip verification={verification} onOpen={() => setVerifierOpen(true)} />
         {isContextKnown && !isMobile && (
           <ContextUsageIndicator usedTokens={usedTokens ?? 0} maxTokens={maxTokens ?? 0} />
         )}
@@ -437,6 +456,7 @@ export const ChatPromptInput = forwardRef<ChatPromptInputRef, ChatPromptInputPro
           maxTokens={maxTokens ?? undefined}
           onNewChat={handleNewChat}
         />
+        <VerificationCenterModal open={verifierOpen} onOpenChange={setVerifierOpen} verification={verification} />
       </>
     )
   },
