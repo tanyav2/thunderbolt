@@ -31,7 +31,7 @@ import { ContextUsageIndicator } from '../context-usage-indicator'
 import { PromptInput } from '../ui/prompt-input'
 import { ChatModePicker } from './chat-mode-picker'
 import { ChatModelPicker } from './chat-model-picker'
-import { VerificationCenterDrawer } from './verification-center-drawer'
+import { VerificationCenterModal } from './verification-center-modal'
 import { VerificationStatusChip } from './verification-status-chip'
 import { useTinfoilVerification } from '@/hooks/use-tinfoil-verification'
 
@@ -116,7 +116,7 @@ export const ChatPromptInput = forwardRef<ChatPromptInputRef, ChatPromptInputPro
     const verification = useTinfoilVerification(activeTinfoilModel)
     const [verifierOpen, setVerifierOpen] = useState(false)
     // "Block sending until verified": hold sends to a Tinfoil enclave until
-    // attestation passes. The chip + drawer expose a retry so a transient
+    // attestation passes. The chip + modal expose a retry so a transient
     // failure isn't a dead end.
     const sendBlockedByVerification = activeTinfoilModel?.provider === 'tinfoil' && verification.status !== 'verified'
 
@@ -463,7 +463,7 @@ export const ChatPromptInput = forwardRef<ChatPromptInputRef, ChatPromptInputPro
           maxTokens={maxTokens ?? undefined}
           onNewChat={handleNewChat}
         />
-        <VerificationCenterDrawer open={verifierOpen} onOpenChange={setVerifierOpen} verification={verification} />
+        <VerificationCenterModal open={verifierOpen} onOpenChange={setVerifierOpen} verification={verification} />
       </>
     )
   },

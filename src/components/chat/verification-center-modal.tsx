@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import type { TinfoilVerification } from '@/hooks/use-tinfoil-verification'
 import { useLocalSettingsStore } from '@/stores/local-settings-store'
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -34,7 +34,7 @@ type VerificationCenterFrameProps = {
 }
 
 /**
- * The iframe + postMessage bridge. Lives inside SheetContent so Radix unmounts
+ * The iframe + postMessage bridge. Lives inside DialogContent so Radix unmounts
  * it on close and remounts it on open — `isReady` therefore resets per open and
  * the handshake re-runs against the fresh iframe with no manual reset.
  */
@@ -69,7 +69,7 @@ const VerificationCenterFrame = ({ verification, onClose, isDarkMode }: Verifica
   }, [])
 
   // Tell the widget the panel is open once it's ready (matches tinfoil-webapp's
-  // protocol). The frame only exists while the drawer is open, so ready ⇒ open;
+  // protocol). The frame only exists while the modal is open, so ready ⇒ open;
   // closing unmounts the iframe, which is the close signal.
   useEffect(() => {
     if (!isReady || !iframeRef.current) {
@@ -79,7 +79,7 @@ const VerificationCenterFrame = ({ verification, onClose, isDarkMode }: Verifica
   }, [isReady])
 
   // Push the document once both sides are ready, re-pushing if the doc updates
-  // (e.g. verifying → verified) while the drawer is open.
+  // (e.g. verifying → verified) while the modal is open.
   useEffect(() => {
     if (!isReady || !doc || !iframeRef.current) {
       return
@@ -104,32 +104,39 @@ const VerificationCenterFrame = ({ verification, onClose, isDarkMode }: Verifica
       title="Tinfoil Verification Center"
       className="min-h-0 w-full flex-1 border-0"
       onLoad={() => setIsReady(true)}
+      // The app sets Cross-Origin-Embedder-Policy (for PowerSync's WASM), which
+      // refuses cross-origin iframes that don't send their own COEP header — the
+      // Verification Center sends none. `credentialless` loads it anonymously and
+      // exempts it from that requirement. React's iframe types omit the attribute.
+      {...({ credentialless: '' } as Record<string, string>)}
     />
   )
 }
 
-type VerificationCenterDrawerProps = {
+type VerificationCenterModalProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
   verification: TinfoilVerification
 }
 
 /**
- * Right-side drawer hosting the Verification Center. Mounted near the composer;
- * SheetContent is portaled + fixed so it overlays the whole app like a right
- * rail (there is no persistent right rail today).
+ * Centered modal hosting the Verification Center. DialogContent is portaled +
+ * fixed so it overlays the whole app; the iframe fills the modal body.
  */
-export const VerificationCenterDrawer = ({ open, onOpenChange, verification }: VerificationCenterDrawerProps) => {
+export const VerificationCenterModal = ({ open, onOpenChange, verification }: VerificationCenterModalProps) => {
   const handleClose = useCallback(() => onOpenChange(false), [onOpenChange])
   const theme = useLocalSettingsStore((s) => s.theme)
   const isDarkMode = resolveIsDarkMode(theme)
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-[90vw] gap-0 p-0 sm:max-w-[400px]" aria-describedby={undefined}>
-        <SheetHeader className="sr-only">
-          <SheetTitle>Verification Center</SheetTitle>
-        </SheetHeader>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent
+        className="flex h-[80vh] w-[90vw] flex-col gap-0 overflow-hidden p-0 sm:max-w-[480px]"
+        aria-describedby={undefined}
+      >
+        <DialogHeader className="sr-only">
+          <DialogTitle>Verification Center</DialogTitle>
+        </DialogHeader>
         {/* Remount the frame when the theme flips so the iframe reloads with the
             matching darkMode — the widget reads it only from the URL. */}
         <VerificationCenterFrame
@@ -138,7 +145,7 @@ export const VerificationCenterDrawer = ({ open, onOpenChange, verification }: V
           onClose={handleClose}
           isDarkMode={isDarkMode}
         />
-      </SheetContent>
-    </Sheet>
+      </DialogContent>
+    </Dialog>
   )
 }

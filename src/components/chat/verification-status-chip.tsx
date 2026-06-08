@@ -48,7 +48,7 @@ type VerificationStatusChipProps = {
 /**
  * Clickable enclave-verification indicator shown next to the composer model
  * picker for Tinfoil-provider models. Renders nothing (`status === 'idle'`) for
- * every other model. Opens the Verification Center drawer on click.
+ * every other model. Opens the Verification Center modal on click.
  */
 export const VerificationStatusChip = ({ verification, onOpen }: VerificationStatusChipProps) => {
   if (verification.status === 'idle') {
