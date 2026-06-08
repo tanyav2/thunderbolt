@@ -5,13 +5,15 @@
 import '@/testing-library'
 import { getClock } from '@/testing-library'
 import { setupTestDatabase, teardownTestDatabase } from '@/dal/test-utils'
+import { useLocalSettingsStore } from '@/stores/local-settings-store'
 import { createMockModel } from '@/test-utils/chat-store-mocks'
 import { createQueryTestWrapper } from '@/test-utils/react-query'
 import { act, cleanup, renderHook } from '@testing-library/react'
 import { afterAll, afterEach, beforeAll, describe, expect, it, mock } from 'bun:test'
+import { useLayoutEffect } from 'react'
 import type { Model } from '@/types'
 import type { SecureClient, VerificationDocument } from 'tinfoil'
-import { useTinfoilVerification } from './use-tinfoil-verification'
+import { type VerificationStatus, useTinfoilVerification } from './use-tinfoil-verification'
 
 // Real providers (HttpClient + DB + react-query) so useHttpClient /
 // useIntegrationStatus resolve normally — no module mocks that would leak into
@@ -141,6 +143,99 @@ describe('useTinfoilVerification', () => {
 
     await flush()
     expect(result.current.status).toBe('verified')
+  })
+
+  it('clears the previous document while a retry re-attestation is in flight', async () => {
+    // retry() starts a new cycle without changing enclaveKey, so the render-phase
+    // reset doesn't fire — the effect itself must drop the stale doc. Otherwise the
+    // Verification Center keeps showing the previous enclave's attestation mid-refresh.
+    const firstDoc = { securityVerified: true, enclaveHost: 'enclave-1' } as unknown as VerificationDocument
+    const secondDoc = { securityVerified: true, enclaveHost: 'enclave-2' } as unknown as VerificationDocument
+    let releaseSecond: (() => void) | null = null
+    let call = 0
+    const getClient = mock(async () => {
+      call += 1
+      if (call === 1) {
+        return { getVerificationDocument: () => firstDoc } as unknown as SecureClient
+      }
+      // Block the re-attestation so the verifying window stays observable.
+      await new Promise<void>((resolve) => {
+        releaseSecond = resolve
+      })
+      return { getVerificationDocument: () => secondDoc } as unknown as SecureClient
+    })
+
+    const { result } = renderVerification(tinfoilModel(), getClient)
+    await flush()
+    expect(result.current.status).toBe('verified')
+    expect(result.current.doc).toBe(firstDoc)
+
+    act(() => result.current.retry())
+    // Re-attestation in flight: the stale document must be gone, not lingering.
+    expect(result.current.status).toBe('verifying')
+    expect(result.current.doc).toBeNull()
+
+    act(() => releaseSecond?.())
+    await flush()
+    expect(result.current.status).toBe('verified')
+    expect(result.current.doc).toBe(secondDoc)
+  })
+
+  it('fails closed (no stale verified frame) when a non-model enclave signal changes', async () => {
+    // Connecting/disconnecting Tinfoil OAuth or changing cloudUrl swaps the
+    // answering enclave without changing modelId. The synchronous reset must
+    // still fire so no committed frame keeps the previous enclave's `verified`
+    // status — otherwise the send gate (status === 'verified') briefly opens.
+    const originalCloudUrl = useLocalSettingsStore.getState().cloudUrl
+    let releaseSecond: (() => void) | null = null
+    let call = 0
+    const getClient = mock(async () => {
+      call += 1
+      if (call === 1) {
+        return fakeClient(true)
+      }
+      // Block the re-attestation so any post-switch `verified` can only be the
+      // stale previous result, not a fresh one.
+      await new Promise<void>((resolve) => {
+        releaseSecond = resolve
+      })
+      return fakeClient(true)
+    })
+
+    // Capture every *committed* status (layout effect runs on commit only, so
+    // a render discarded by the render-phase reset never lands here).
+    const committed: VerificationStatus[] = []
+    const model = tinfoilModel()
+    try {
+      const { result } = renderHook(
+        () => {
+          const v = useTinfoilVerification(model, getClient)
+          useLayoutEffect(() => {
+            committed.push(v.status)
+          })
+          return v
+        },
+        { wrapper: createQueryTestWrapper() },
+      )
+      await flush()
+      expect(result.current.status).toBe('verified')
+
+      const before = committed.length
+      act(() => {
+        useLocalSettingsStore.setState({ cloudUrl: `${originalCloudUrl}#switched` })
+      })
+
+      // Re-attestation is still pending, so the only way `verified` could appear
+      // here is the previous enclave's stale status leaking through.
+      expect(committed.slice(before)).not.toContain('verified')
+      expect(result.current.status).toBe('verifying')
+
+      act(() => releaseSecond?.())
+      await flush()
+      expect(result.current.status).toBe('verified')
+    } finally {
+      useLocalSettingsStore.setState({ cloudUrl: originalCloudUrl })
+    }
   })
 
   it('fails (not stuck verifying) after exhausting retries while offline', async () => {
