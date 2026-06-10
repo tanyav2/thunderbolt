@@ -12,7 +12,15 @@ import {
   isFinalStep,
   shouldRetry,
 } from '@/ai/step-logic'
-import { getAllSkills, getIntegrationStatus, getModel, getModelProfile, getSettings } from '@/dal'
+import {
+  getAllSkills,
+  getIntegrationCredentials,
+  getIntegrationStatus,
+  getModel,
+  getModelProfile,
+  getSettings,
+} from '@/dal'
+import { ensureValidOAuthToken } from '@/integrations/oauth-credentials'
 import { extractLastUserText, resolveSkillTokenInstructions } from '@/skills/resolve-skill-system-messages'
 import { getDb } from '@/db/database'
 import { getLocalSetting } from '@/stores/local-settings-store'
@@ -211,7 +219,7 @@ export const mergeMcpTools = async (
   return { toolset, summary: mcpServerEntries.length > 0 ? mcpServerEntries.join('\n') : undefined }
 }
 
-export const createModel = async (modelConfig: Model, getProxyFetch: () => FetchFn) => {
+export const createModel = async (modelConfig: Model, getProxyFetch: () => FetchFn, httpClient?: HttpClient) => {
   // The thunderbolt provider goes through its own SSO-aware fetch below; all
   // other providers route through the universal proxy. We resolve the proxy
   // fetch lazily so a settings change between chat creation and this call
@@ -303,8 +311,34 @@ export const createModel = async (modelConfig: Model, getProxyFetch: () => Fetch
       return openrouter(modelConfig.model)
     }
     case 'tinfoil': {
-      // System Tinfoil models proxy through Thunderbolt's backend; the bearer
-      // key is injected server-side, so we pass a placeholder here only to
+      // A connected + enabled Tinfoil plan talks directly to the enclave with
+      // the user's OAuth token as bearer, bypassing Thunderbolt's proxy.
+      // Attestation still runs: getTinfoilClient() verifies the enclave before
+      // sending, and bodies stay end-to-end encrypted.
+      if (modelConfig.isSystem && httpClient) {
+        const oauthRow = await getIntegrationCredentials(getDb(), 'tinfoil')
+        if (oauthRow?.enabled && oauthRow.credentials) {
+          try {
+            const accessToken = await ensureValidOAuthToken(httpClient, 'tinfoil', oauthRow.credentials)
+            const client = await getTinfoilClient()
+            const tinfoil = createOpenAICompatible({
+              name: 'tinfoil',
+              baseURL: client.getBaseURL()!,
+              apiKey: accessToken,
+              fetch: client.fetch,
+            })
+            return tinfoil(modelConfig.model)
+          } catch (err) {
+            // Deliberate: a lapsed subscription or revoked token family falls
+            // back to the managed path so built-in models keep working —
+            // connecting a plan changes who pays, not reachability. Plan state
+            // is surfaced in Settings instead of failing the request.
+            console.warn('Tinfoil OAuth token unavailable; falling back to the managed path', err)
+          }
+        }
+      }
+      // System Tinfoil models otherwise proxy through Thunderbolt's backend; the
+      // bearer key is injected server-side, so we pass a placeholder here only to
       // satisfy the SDK's apiKey requirement. User-added Tinfoil models keep
       // the BYOK flow and require a real key.
       if (modelConfig.isSystem) {
@@ -456,7 +490,7 @@ export const aiFetchStreamingResponse = async ({
   const activeNudges = getNudgeMessagesFromProfile(profile, modeName)
 
   try {
-    const baseModel = await createModel(model, getProxyFetch)
+    const baseModel = await createModel(model, getProxyFetch, httpClient)
 
     const wrappedModel = wrapLanguageModel({
       providerId: model.provider,

@@ -54,6 +54,8 @@ export const ensureValidOAuthToken = async (
   const updated: OAuthCredentials = {
     ...credentials,
     access_token: newTokens.access_token,
+    // Rotating providers (Tinfoil) replace the refresh token on every use.
+    refresh_token: newTokens.refresh_token ?? credentials.refresh_token,
     expires_at: Date.now() + newTokens.expires_in * 1000,
   }
 
