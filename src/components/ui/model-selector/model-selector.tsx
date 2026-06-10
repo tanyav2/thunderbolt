@@ -9,7 +9,7 @@ import { useHaptics } from '@/hooks/use-haptics'
 import { cn } from '@/lib/utils'
 import type { ChatThread } from '@/layout/sidebar/types'
 import type { Model } from '@/types'
-import { AlertTriangle, ChevronDown, Lock, Plus } from 'lucide-react'
+import { AlertTriangle, ChevronDown, Plus, ShieldCheck } from 'lucide-react'
 import { useCallback, useMemo } from 'react'
 
 export type ModelSelectorProps = {
@@ -56,7 +56,8 @@ const toMenuItem = (
   label: model.name,
   description: model.description || model.model,
   searchTerms: [model.model, model.vendor].filter(Boolean).join(' '),
-  icon: model.isConfidential === 1 ? <Lock className="size-3.5 text-green-600 dark:text-green-500" /> : undefined,
+  icon:
+    model.isConfidential === 1 ? <ShieldCheck className="size-3.5 text-green-600 dark:text-green-500" /> : undefined,
   disabled: isDisabled,
   data: { model, disabledByEncryption },
 })
@@ -139,7 +140,7 @@ export const ModelSelector = ({
       {selected?.data?.model && needsApiKey(selected.data.model) ? (
         <AlertTriangle className="size-3.5 text-amber-500" />
       ) : selected?.data?.model.isConfidential === 1 ? (
-        <Lock className="size-3.5 text-muted-foreground" />
+        <ShieldCheck className="size-3.5 text-muted-foreground" />
       ) : null}
       <span className={cn('font-medium', variant === 'bordered' && 'text-muted-foreground')}>
         {selected?.label ?? 'Select Model'}
