@@ -49,7 +49,7 @@ import { useQuery } from '@powersync/tanstack-react-query'
 import { toCompilableQuery } from '@powersync/drizzle-driver'
 import { generateText } from 'ai'
 import { http } from '@/lib/http'
-import { AlertTriangle, Check, Cpu, Loader2, Lock, Pen, Plus, Trash2, X } from 'lucide-react'
+import { AlertTriangle, Check, Cpu, Loader2, Pen, Plus, ShieldCheck, Trash2, X } from 'lucide-react'
 import { useEffect, useMemo, useReducer, useRef, useState, type KeyboardEvent } from 'react'
 import { useForm } from 'react-hook-form'
 import { TinfoilConnectionCard, tinfoilConnectionCardId } from './tinfoil-connection-card'
@@ -1166,19 +1166,9 @@ export default function ModelsPage() {
                   <div className="flex items-center gap-3 min-w-0 flex-1">
                     <ModelIcon model={model} />
                     <div className="min-w-0 flex-1">
-                      <CardTitle className="text-lg font-medium flex flex-row items-center gap-2">
-                        {!!model.isConfidential && (
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Lock className="size-3.5" />
-                              </TooltipTrigger>
-                              <TooltipContent side="bottom">
-                                <p>Encrypted</p>
-                              </TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                        )}
+                      {/* items-baseline (not items-center): ModificationIndicator pads the name
+                          below the baseline for its underline, which skews box-centering. */}
+                      <CardTitle className="text-lg font-medium flex flex-row items-baseline gap-2">
                         {needsApiKey(model) && (
                           <TooltipProvider>
                             <Tooltip>
@@ -1200,6 +1190,9 @@ export default function ModelsPage() {
                         >
                           {model.name}
                         </ModificationIndicator>
+                        {!!model.isConfidential && (
+                          <ShieldCheck className="size-3.5 text-green-600 dark:text-green-500 flex-shrink-0" />
+                        )}
                       </CardTitle>
                       <p className="text-sm text-muted-foreground">
                         {getProviderDisplay(model.provider)} - {model.model}
@@ -1284,6 +1277,11 @@ export default function ModelsPage() {
                             to power it with your plan.
                           </>
                         )}
+                      </div>
+                    )}
+                    {!!model.isConfidential && (
+                      <div className="text-sm text-muted-foreground">
+                        All conversations are processed privately in secure cloud hardware.
                       </div>
                     )}
                   </div>
