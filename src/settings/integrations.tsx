@@ -9,24 +9,19 @@ import { Button } from '@/components/ui/button'
 import { Card, CardAction, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Switch } from '@/components/ui/switch'
 import { ConnectProviderButton } from '@/components/connect-provider-button'
-import { GoogleIcon, MicrosoftIcon, TinfoilIcon } from '@/components/provider-icons'
+import { GoogleIcon, MicrosoftIcon } from '@/components/provider-icons'
 import { configs as googleToolConfigs } from '@/integrations/google/tools'
 import { configs as microsoftToolConfigs } from '@/integrations/microsoft/tools'
 import { configs as proToolConfigs } from '@/integrations/thunderbolt-pro/tools'
 import { getProStatus } from '@/integrations/thunderbolt-pro/utils'
-import { getOAuthCredentials } from '@/integrations/oauth-credentials'
-import { revokeTokens as revokeTinfoilTokens } from '@/integrations/tinfoil/auth'
-import { tinfoilManageSubscriptionUrl } from '@/integrations/tinfoil/constants'
 import { type OAuthProvider } from '@/lib/auth'
-import { openExternalUrl } from '@/lib/open-external-url'
-import { useDatabase, useHttpClient } from '@/contexts'
+import { useDatabase } from '@/contexts'
 import { deleteIntegrationCredentials, setIntegrationEnabled, updateSettings } from '@/dal'
 import { useIntegrationStatus } from '@/hooks/use-integration-status'
-import { useOAuthConnect } from '@/hooks/use-oauth-connect'
+import { useOAuthLocationCallback } from '@/hooks/use-oauth-location-callback'
 import { useSettings } from '@/hooks/use-settings'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { useLocation, useNavigate } from 'react-router'
+import { useMemo, useState, type ReactNode } from 'react'
 
 type Integration = {
   id: string
@@ -37,25 +32,6 @@ type Integration = {
   isEnabled: boolean
   isConnected: boolean
   userEmail?: string
-  /** Optional one-line subtitle under the card title (e.g. plan framing). */
-  description?: string
-  /** When set, a "Manage subscription" outbound link is shown once connected. */
-  manageSubscriptionUrl?: string
-}
-
-/**
- * Subtitle for the Tinfoil card. Mirrors the plan gate in `src/ai/fetch.ts`
- * (direct, plan-billed path requires the integration connected AND enabled) and
- * the models page, so the three surfaces never disagree about who's paying.
- */
-const tinfoilCardDescription = (connected: boolean, enabled: boolean): string => {
-  if (!connected) {
-    return 'Power Tinfoil’s confidential models with your own plan. Connecting walks you through subscribing.'
-  }
-  if (enabled) {
-    return 'Connected — Tinfoil models run on your plan.'
-  }
-  return 'Connected, but disabled — Tinfoil models use the managed service until you re-enable.'
 }
 
 const ThunderboltProIcon = () => (
@@ -66,14 +42,11 @@ const ThunderboltProIcon = () => (
 
 export default function IntegrationsPage() {
   const db = useDatabase()
-  const httpClient = useHttpClient()
-  const location = useLocation()
-  const navigate = useNavigate()
 
   const [error, setError] = useState<string | null>(null)
-  const [isProcessingCallback, setIsProcessingCallback] = useState(() => {
-    const oauth = (location.state as { oauth?: unknown } | null)?.oauth
-    return !!oauth
+  const { isProcessingCallback } = useOAuthLocationCallback({
+    returnContext: 'integrations',
+    onError: (err) => setError(err.message),
   })
 
   const queryClient = useQueryClient()
@@ -122,53 +95,8 @@ export default function IntegrationsPage() {
         isConnected: integrationStatusData?.microsoftConnected ?? false,
         userEmail: integrationStatusData?.microsoftEmail ?? undefined,
       },
-      {
-        id: 'tinfoil',
-        name: 'Tinfoil',
-        provider: 'tinfoil',
-        connectLabel: 'Connect Tinfoil',
-        description: tinfoilCardDescription(
-          integrationStatusData?.tinfoilConnected ?? false,
-          integrationStatusData?.tinfoilEnabled ?? false,
-        ),
-        icon: <TinfoilIcon />,
-        isEnabled: integrationStatusData?.tinfoilEnabled ?? false,
-        isConnected: integrationStatusData?.tinfoilConnected ?? false,
-        userEmail: integrationStatusData?.tinfoilEmail || undefined,
-        manageSubscriptionUrl: tinfoilManageSubscriptionUrl,
-      },
     ]
   }, [integrationSettings.integrationsProIsEnabled.value, integrationStatusData, proStatus?.isProUser])
-
-  const { processCallback } = useOAuthConnect({
-    onError: (err) => {
-      setError(err.message)
-    },
-    returnContext: 'integrations',
-  })
-
-  // Handle OAuth callback when navigated back from /oauth/callback
-  useEffect(() => {
-    const oauth = (location.state as { oauth?: { code?: string; state?: string; error?: string } } | null)?.oauth
-    if (!oauth) {
-      return
-    }
-
-    const handleCallback = async () => {
-      setIsProcessingCallback(true)
-      try {
-        await processCallback(oauth)
-      } catch (err) {
-        console.error('Failed to complete OAuth:', err)
-      } finally {
-        setIsProcessingCallback(false)
-        navigate('.', { replace: true, state: null })
-      }
-    }
-
-    handleCallback()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [location.state])
 
   const handleGetPro = async () => {
     // For now, just show an alert since this is a placeholder
@@ -179,19 +107,6 @@ export default function IntegrationsPage() {
 
   const handleDisconnect = async (integration: Integration) => {
     try {
-      if (integration.provider === 'tinfoil') {
-        // Revoke the token family server-side before clearing locally, so the
-        // paid credential stops working even if the local copy later leaks.
-        // Best-effort — a failed revoke must not block local disconnect.
-        try {
-          const creds = await getOAuthCredentials('tinfoil')
-          if (creds.refresh_token) {
-            await revokeTinfoilTokens(httpClient, creds.refresh_token)
-          }
-        } catch (revokeErr) {
-          console.warn('Tinfoil token revoke failed; continuing with local disconnect', revokeErr)
-        }
-      }
       await deleteIntegrationCredentials(db, integration.provider as OAuthProvider)
       await queryClient.invalidateQueries({ queryKey: ['integrationStatus'] })
     } catch (err) {
@@ -244,7 +159,6 @@ export default function IntegrationsPage() {
                     {integration.isConnected && integration.userEmail ? integration.userEmail : integration.name}
                   </CardTitle>
                 </div>
-                {integration.description && <p className="text-sm text-muted-foreground">{integration.description}</p>}
               </div>
 
               <CardAction className="flex items-center gap-2">
@@ -321,15 +235,6 @@ export default function IntegrationsPage() {
 
             {integration.isConnected && integration.provider !== 'thunderbolt-pro' && (
               <CardFooter className="gap-2">
-                {integration.manageSubscriptionUrl && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => void openExternalUrl(integration.manageSubscriptionUrl!)}
-                  >
-                    Manage subscription
-                  </Button>
-                )}
                 <Button variant="outline" size="sm" onClick={() => handleDisconnect(integration)} className="ml-auto">
                   Disconnect
                 </Button>

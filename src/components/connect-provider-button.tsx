@@ -5,6 +5,7 @@
 import { Button } from '@/components/ui/button'
 import { useOAuthConnect } from '@/hooks/use-oauth-connect'
 import { type OAuthProvider } from '@/lib/auth'
+import type { ReturnContext } from '@/lib/oauth-state'
 import { Check, Loader2, X } from 'lucide-react'
 import { useState } from 'react'
 
@@ -22,7 +23,7 @@ type ConnectProviderButtonProps = {
   onError?: (error: Error) => void
   onDisconnect?: () => void
   setPreferredName?: boolean
-  returnContext?: 'onboarding' | 'integrations'
+  returnContext?: ReturnContext
   className?: string
   variant?: 'default' | 'ghost' | 'outline' | 'secondary' | 'destructive' | 'link'
   size?: 'default' | 'sm' | 'lg' | 'icon'
@@ -35,7 +36,7 @@ type ConnectProviderButtonProps = {
 }
 
 /**
- * Reusable button for connecting OAuth providers (Google, Microsoft)
+ * Reusable button for connecting OAuth providers
  */
 export const ConnectProviderButton = ({
   provider,

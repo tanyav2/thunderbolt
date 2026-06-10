@@ -51,7 +51,7 @@ import { http } from '@/lib/http'
 import { AlertTriangle, Check, Cpu, Loader2, Lock, Pen, Plus, Trash2, X } from 'lucide-react'
 import { useEffect, useMemo, useReducer, useRef, useState, type KeyboardEvent } from 'react'
 import { useForm } from 'react-hook-form'
-import { useNavigate } from 'react-router'
+import { TinfoilConnectionCard, tinfoilConnectionCardId } from './tinfoil-connection-card'
 import { v7 as uuidv7 } from 'uuid'
 import { z } from 'zod'
 
@@ -347,7 +347,6 @@ const EditModelModal = ({
 
 export default function ModelsPage() {
   const db = useDatabase()
-  const navigate = useNavigate()
   const getProxyFetch = useProxyFetchGetter()
   const { data: integrationStatusData } = useIntegrationStatus()
   const tinfoilConnected = Boolean(integrationStatusData?.tinfoilConnected)
@@ -1156,6 +1155,8 @@ export default function ModelsPage() {
         </Dialog>
       </PageHeader>
 
+      <TinfoilConnectionCard />
+
       <div className="grid gap-4">
         {models.map((model) => {
           const isEnabled = model.enabled === 1
@@ -1276,7 +1277,11 @@ export default function ModelsPage() {
                             Runs on the managed Tinfoil service.{' '}
                             <button
                               type="button"
-                              onClick={() => navigate('/settings/integrations')}
+                              onClick={() =>
+                                document
+                                  .getElementById(tinfoilConnectionCardId)
+                                  ?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                              }
                               className="text-foreground underline underline-offset-2 hover:no-underline"
                             >
                               {tinfoilConnected ? 'Enable Tinfoil' : 'Connect Tinfoil'}

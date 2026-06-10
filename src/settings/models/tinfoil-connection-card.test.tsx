@@ -15,30 +15,30 @@ import { type ReactNode } from 'react'
 import { MemoryRouter } from 'react-router'
 
 // Per docs/development/testing.md: do NOT mock shared modules. useIntegrationStatus,
-// useSettings, getProStatus, etc. run their real implementations against the test DB.
+// useSettings, etc. run their real implementations against the test DB.
 import { SignInModalProvider } from '@/contexts'
 import type { AuthClient } from '@/contexts'
-import IntegrationsPage from './integrations'
+import { TinfoilConnectionCard } from './tinfoil-connection-card'
 
 const authedSession = {
   user: { id: 'user-1', email: 'a@b.com', name: 'Alice', isAnonymous: false },
 }
 
-// IntegrationsPage uses react-router (useLocation/useNavigate), which the test
-// provider does not supply — wrap in a MemoryRouter.
-const renderPage = (authClient: AuthClient) => {
+// TinfoilConnectionCard uses react-router (useLocation/useNavigate), which the
+// test provider does not supply — wrap in a MemoryRouter.
+const renderCard = (authClient: AuthClient) => {
   const TestProvider = createTestProvider({ authClient })
   const Wrapper = ({ children }: { children: ReactNode }) => (
     <TestProvider>
       <SignInModalProvider>
-        <MemoryRouter initialEntries={['/settings/integrations']}>{children}</MemoryRouter>
+        <MemoryRouter initialEntries={['/settings/models']}>{children}</MemoryRouter>
       </SignInModalProvider>
     </TestProvider>
   )
-  return render(<IntegrationsPage />, { wrapper: Wrapper })
+  return render(<TinfoilConnectionCard />, { wrapper: Wrapper })
 }
 
-/** Flush the page's mount-time queries (integration status, settings, pro status). */
+/** Flush the card's mount-time queries (integration status). */
 const flushQueries = async () => {
   await act(async () => {
     await getClock().runAllAsync()
@@ -59,7 +59,7 @@ const seedConnectedTinfoil = async () => {
   )
 }
 
-describe('IntegrationsPage — Tinfoil SKU surface', () => {
+describe('TinfoilConnectionCard — Tinfoil SKU surface', () => {
   beforeAll(async () => {
     await setupTestDatabase()
   })
@@ -77,7 +77,7 @@ describe('IntegrationsPage — Tinfoil SKU surface', () => {
   })
 
   it('frames the disconnected Tinfoil card around powering models with a plan', async () => {
-    renderPage(createMockAuthClient({ session: authedSession }))
+    renderCard(createMockAuthClient({ session: authedSession }))
     await flushQueries()
 
     // Subscription-aware framing instead of a bare "Connect Tinfoil".
@@ -89,7 +89,7 @@ describe('IntegrationsPage — Tinfoil SKU surface', () => {
 
   it('shows connected state with a Manage subscription outbound link', async () => {
     await seedConnectedTinfoil()
-    renderPage(createMockAuthClient({ session: authedSession }))
+    renderCard(createMockAuthClient({ session: authedSession }))
     await flushQueries()
 
     expect(screen.getByText('user@tinfoil.test')).toBeInTheDocument()
@@ -112,7 +112,7 @@ describe('IntegrationsPage — Tinfoil SKU surface', () => {
       },
       false,
     )
-    renderPage(createMockAuthClient({ session: authedSession }))
+    renderCard(createMockAuthClient({ session: authedSession }))
     await flushQueries()
 
     expect(screen.getByText(/connected, but disabled/i)).toBeInTheDocument()
@@ -127,7 +127,7 @@ describe('IntegrationsPage — Tinfoil SKU surface', () => {
     const mockWindowOpen = mock(() => null)
     window.open = mockWindowOpen as typeof window.open
 
-    renderPage(createMockAuthClient({ session: authedSession }))
+    renderCard(createMockAuthClient({ session: authedSession }))
     await flushQueries()
 
     fireEvent.click(screen.getByRole('button', { name: /manage subscription/i }))

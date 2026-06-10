@@ -2,21 +2,32 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
+import { HttpClientProvider } from '@/contexts'
 import { createModel, saveIntegrationCredentials } from '@/dal'
 import { resetTestDatabase, setupTestDatabase, teardownTestDatabase } from '@/dal/test-utils'
 import { getDb } from '@/db/database'
 import { reconcileDefaults } from '@/lib/reconcile-defaults'
+import { createMockHttpClient } from '@/test-utils/http-client'
 import { renderWithReactivity, waitForElement } from '@/test-utils/powersync-reactivity-test'
 import { getClock } from '@/testing-library'
 import '@testing-library/jest-dom'
 import { act, cleanup, screen } from '@testing-library/react'
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'bun:test'
+import { type ReactNode } from 'react'
 import { v7 as uuidv7 } from 'uuid'
 import ModelsPage from './index'
 
-// ModelsPage uses react-router (useNavigate) for the "Connect/Enable Tinfoil"
-// affordance, so renders go through renderWithReactivity's `route` option.
-const renderModelsPage = () => renderWithReactivity(<ModelsPage />, { route: '/settings/models', tables: ['models'] })
+// ModelsPage mounts TinfoilConnectionCard, which uses react-router
+// (useLocation/useNavigate) and useHttpClient — renders go through
+// renderWithReactivity's `route` option plus an HttpClientProvider wrapper.
+const renderModelsPage = () =>
+  renderWithReactivity(<ModelsPage />, {
+    route: '/settings/models',
+    tables: ['models'],
+    wrapper: ({ children }: { children: ReactNode }) => (
+      <HttpClientProvider httpClient={createMockHttpClient()}>{children}</HttpClientProvider>
+    ),
+  })
 
 const seedTinfoil = (enabled: boolean) =>
   saveIntegrationCredentials(
