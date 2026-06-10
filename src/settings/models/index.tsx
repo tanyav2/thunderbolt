@@ -1261,7 +1261,7 @@ export default function ModelsPage() {
                       </div>
                     )}
                     {model.provider === 'thunderbolt' && (
-                      <div className="text-sm text-muted-foreground">Uses Thunderbolt cloud service</div>
+                      <div className="text-sm text-muted-foreground">Uses Thunderbolt cloud service.</div>
                     )}
                     {model.provider === 'tinfoil' && model.isSystem === 1 && (
                       <div className="text-sm text-muted-foreground">
