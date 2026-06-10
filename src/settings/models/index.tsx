@@ -3,6 +3,7 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 import { createModel, getTinfoilClient } from '@/ai/fetch'
+import { ModelIcon } from '@/components/model-icon'
 import { ModificationIndicator } from '@/components/modification-indicator'
 import {
   AlertDialog,
@@ -850,10 +851,6 @@ export default function ModelsPage() {
     }
   }
 
-  const getModelInitial = (model: Model) => {
-    return model.name[0].toUpperCase()
-  }
-
   const handleDeleteModel = (modelId: string) => {
     deleteModelMutation.mutate(modelId)
   }
@@ -1167,9 +1164,7 @@ export default function ModelsPage() {
               <CardHeader className="py-0">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3 min-w-0 flex-1">
-                    <div className="flex items-center justify-center bg-primary text-primary-foreground size-8 rounded-md font-medium flex-shrink-0">
-                      {getModelInitial(model)}
-                    </div>
+                    <ModelIcon model={model} />
                     <div className="min-w-0 flex-1">
                       <CardTitle className="text-lg font-medium flex flex-row items-center gap-2">
                         {!!model.isConfidential && (
