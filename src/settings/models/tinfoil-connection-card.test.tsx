@@ -53,7 +53,8 @@ const seedConnectedTinfoil = async () => {
       access_token: 'test-access',
       refresh_token: 'test-refresh',
       expires_at: Date.now() + 3_600_000,
-      profile: { email: 'user@tinfoil.test', name: 'Tinfoil User' },
+      // Matches the real flow: Tinfoil's static identity carries no email.
+      profile: { email: '', name: 'Tinfoil' },
     },
     true,
   )
@@ -92,7 +93,7 @@ describe('TinfoilConnectionCard — Tinfoil SKU surface', () => {
     renderCard(createMockAuthClient({ session: authedSession }))
     await flushQueries()
 
-    expect(screen.getByText('user@tinfoil.test')).toBeInTheDocument()
+    expect(screen.getByText('Tinfoil')).toBeInTheDocument()
     expect(screen.getByText(/tinfoil models run on your plan/i)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /manage subscription/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /disconnect/i })).toBeInTheDocument()
@@ -108,7 +109,8 @@ describe('TinfoilConnectionCard — Tinfoil SKU surface', () => {
         access_token: 'test-access',
         refresh_token: 'test-refresh',
         expires_at: Date.now() + 3_600_000,
-        profile: { email: 'user@tinfoil.test', name: 'Tinfoil User' },
+        // Matches the real flow: Tinfoil's static identity carries no email.
+        profile: { email: '', name: 'Tinfoil' },
       },
       false,
     )

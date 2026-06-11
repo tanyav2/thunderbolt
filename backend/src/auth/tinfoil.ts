@@ -7,17 +7,61 @@ import { createAuthMacro } from '@/auth/elysia-plugin'
 import { getSettings, isOAuthRedirectUriAllowed } from '@/config/settings'
 import { safeErrorHandler } from '@/middleware/error-handling'
 import { Elysia, t } from 'elysia'
-import { codeRequestSchema, refreshRequestSchema, type OAuthTokenResponse } from './types'
+import { oauthTokenResponseSchema, type OAuthTokenResponse } from './types'
 
 const tinfoilTokenUrl = 'https://api.tinfoil.sh/oauth/token'
 const tinfoilRevokeUrl = 'https://api.tinfoil.sh/oauth/revoke'
 
+const unconfiguredError = { error: 'Tinfoil OAuth not configured. Set TINFOIL_CLIENT_ID.' }
+
+type StatusSetter = { status?: number | string }
+
+/**
+ * POST a grant to Tinfoil's token endpoint and normalize the result to the
+ * shared OAuthTokenResponse shape. Upstream rejections become 400s carrying the
+ * upstream message; network failures and malformed 200s throw to
+ * safeErrorHandler. `fallbackRefreshToken` covers a refresh response that omits
+ * rotation (exchange passes none — a missing refresh_token stays null).
+ */
+const proxyTokenGrant = async (
+  fetchFn: typeof fetch,
+  set: StatusSetter,
+  grant: 'exchange' | 'refresh',
+  params: Record<string, string>,
+  fallbackRefreshToken?: string,
+): Promise<OAuthTokenResponse | { error: string }> => {
+  const response = await fetchFn(tinfoilTokenUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams(params),
+  })
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}))
+    const errorMsg = errorData.error_description || errorData.error || `HTTP ${response.status}`
+    console.error(`Tinfoil token ${grant} failed:`, errorMsg)
+    set.status = 400
+    return { error: `Token ${grant} failed: ${errorMsg}` }
+  }
+
+  // Validate before this feeds client credential storage: a malformed 200 must
+  // become a thrown 500, not a persisted `access_token: undefined`.
+  const tokenData = oauthTokenResponseSchema.parse(await response.json())
+  console.info(`Tinfoil token ${grant} succeeded`)
+
+  return {
+    ...tokenData,
+    refresh_token: tokenData.refresh_token ?? fallbackRefreshToken ?? null,
+    scope: tokenData.scope ?? null,
+  }
+}
+
 /**
  * Tinfoil OAuth proxy. Unlike Google/Microsoft, Tinfoil is a public OAuth 2.1
- * client (PKCE S256, no client secret); the proxy exists so the `client_id`
- * stays server-side and the redirect_uri is validated against the trusted-origin
- * allowlist. The returned access token is an opaque bearer the Tinfoil enclave
- * verifies itself — never parsed here.
+ * client (PKCE S256, no client secret), and its client_id is not a secret —
+ * the proxy's job is enforcing the redirect_uri allowlist and keeping the
+ * token-endpoint call server-side. The returned access token is an opaque
+ * bearer the Tinfoil enclave verifies itself — never parsed here.
  */
 export const createTinfoilAuthRoutes = (auth: Auth, fetchFn: typeof fetch = globalThis.fetch) => {
   return new Elysia({ prefix: '/auth/tinfoil' })
@@ -41,60 +85,22 @@ export const createTinfoilAuthRoutes = (auth: Auth, fetchFn: typeof fetch = glob
       '/exchange',
       async ({ body, set }) => {
         const settings = getSettings()
-
         if (!settings.tinfoilClientId) {
           set.status = 503
-          return { error: 'Tinfoil OAuth not configured. Set TINFOIL_CLIENT_ID.' }
+          return unconfiguredError
         }
-
-        const validatedBody = codeRequestSchema.parse(body)
-
-        if (!isOAuthRedirectUriAllowed(validatedBody.redirect_uri, settings)) {
+        if (!isOAuthRedirectUriAllowed(body.redirect_uri, settings)) {
           set.status = 400
           return { error: 'Invalid redirect_uri' }
         }
 
-        const data = new URLSearchParams({
+        return proxyTokenGrant(fetchFn, set, 'exchange', {
           grant_type: 'authorization_code',
-          code: validatedBody.code,
+          code: body.code,
           client_id: settings.tinfoilClientId,
-          redirect_uri: validatedBody.redirect_uri,
-          code_verifier: validatedBody.code_verifier,
+          redirect_uri: body.redirect_uri,
+          code_verifier: body.code_verifier,
         })
-
-        try {
-          const response = await fetchFn(tinfoilTokenUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: data,
-          })
-
-          if (!response.ok) {
-            const errorData = await response.json().catch(() => ({}))
-            const errorMsg = errorData.error_description || errorData.error || `HTTP ${response.status}`
-            console.error('Tinfoil token exchange failed:', errorMsg)
-
-            set.status = 400
-            return { error: `Token exchange failed: ${errorMsg}` }
-          }
-
-          const tokenData = await response.json()
-          console.info('Successfully exchanged Tinfoil OAuth code for tokens')
-
-          const result: OAuthTokenResponse = {
-            access_token: tokenData.access_token,
-            refresh_token: tokenData.refresh_token || null,
-            expires_in: tokenData.expires_in,
-            token_type: tokenData.token_type,
-            scope: tokenData.scope || null,
-          }
-
-          return result
-        } catch (error) {
-          console.error('Unexpected error during Tinfoil token exchange:', error)
-          set.status = 500
-          return { error: 'Internal server error during token exchange' }
-        }
       },
       {
         auth: true,
@@ -110,56 +116,25 @@ export const createTinfoilAuthRoutes = (auth: Auth, fetchFn: typeof fetch = glob
       '/refresh',
       async ({ body, set }) => {
         const settings = getSettings()
-
         if (!settings.tinfoilClientId) {
           set.status = 503
-          return { error: 'Tinfoil OAuth not configured. Set TINFOIL_CLIENT_ID.' }
+          return unconfiguredError
         }
 
-        const validatedBody = refreshRequestSchema.parse(body)
-
-        const data = new URLSearchParams({
-          grant_type: 'refresh_token',
-          refresh_token: validatedBody.refresh_token,
-          client_id: settings.tinfoilClientId,
-        })
-
-        try {
-          const response = await fetchFn(tinfoilTokenUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: data,
-          })
-
-          if (!response.ok) {
-            const errorData = await response.json().catch(() => ({}))
-            const errorMsg = errorData.error_description || errorData.error || `HTTP ${response.status}`
-            console.error('Tinfoil token refresh failed:', errorMsg)
-
-            set.status = 400
-            return { error: `Token refresh failed: ${errorMsg}` }
-          }
-
-          const tokenData = await response.json()
-          console.info('Successfully refreshed Tinfoil OAuth token')
-
-          // Tinfoil rotates the refresh token on every use and revokes the whole
-          // family if a spent one is replayed, so the rotated token MUST replace
-          // the old.
-          const result: OAuthTokenResponse = {
-            access_token: tokenData.access_token,
-            refresh_token: tokenData.refresh_token || validatedBody.refresh_token,
-            expires_in: tokenData.expires_in,
-            token_type: tokenData.token_type,
-            scope: tokenData.scope || null,
-          }
-
-          return result
-        } catch (error) {
-          console.error('Unexpected error during Tinfoil token refresh:', error)
-          set.status = 500
-          return { error: 'Internal server error during token refresh' }
-        }
+        // Tinfoil rotates the refresh token on every use and revokes the whole
+        // family if a spent one is replayed, so the rotated token MUST replace
+        // the old.
+        return proxyTokenGrant(
+          fetchFn,
+          set,
+          'refresh',
+          {
+            grant_type: 'refresh_token',
+            refresh_token: body.refresh_token,
+            client_id: settings.tinfoilClientId,
+          },
+          body.refresh_token,
+        )
       },
       {
         auth: true,
@@ -173,19 +148,18 @@ export const createTinfoilAuthRoutes = (auth: Auth, fetchFn: typeof fetch = glob
       '/revoke',
       async ({ body, set }) => {
         const settings = getSettings()
-
         if (!settings.tinfoilClientId) {
           set.status = 503
-          return { error: 'Tinfoil OAuth not configured. Set TINFOIL_CLIENT_ID.' }
+          return unconfiguredError
         }
 
-        const validatedBody = refreshRequestSchema.parse(body)
-
-        // RFC 7009: revoking the refresh token also disables the access tokens
-        // it minted. Always returns 200 so local disconnect can proceed.
+        // RFC 7009: revokes this refresh-token family member and its linked
+        // opaque key; already-minted JWT access tokens stay valid in-enclave
+        // until exp (≤15 min). Failures still answer 200 `{ revoked: false }`
+        // so local disconnect can proceed while surfacing the real outcome.
         const data = new URLSearchParams({
           client_id: settings.tinfoilClientId,
-          token: validatedBody.refresh_token,
+          token: body.refresh_token,
         })
 
         try {

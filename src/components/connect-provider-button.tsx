@@ -4,16 +4,10 @@
 
 import { Button } from '@/components/ui/button'
 import { useOAuthConnect } from '@/hooks/use-oauth-connect'
-import { type OAuthProvider } from '@/lib/auth'
+import { providerLabels, type OAuthProvider } from '@/lib/auth'
 import type { ReturnContext } from '@/lib/oauth-state'
 import { Check, Loader2, X } from 'lucide-react'
 import { useState } from 'react'
-
-const providerNames: Record<OAuthProvider, string> = {
-  google: 'Google',
-  microsoft: 'Microsoft',
-  tinfoil: 'Tinfoil',
-}
 
 type ConnectProviderButtonProps = {
   provider: OAuthProvider
@@ -82,7 +76,7 @@ export const ConnectProviderButton = ({
     await connect(provider)
   }
 
-  const providerName = providerNames[provider]
+  const providerName = providerLabels[provider]
   const defaultConnectLabel = connectLabel || `Connect ${providerName}`
 
   const showDisconnect = isConnected && allowDisconnect && isHovered

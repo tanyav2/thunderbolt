@@ -134,7 +134,6 @@ export const getIntegrationStatus = async (
   microsoftEmail: string | null
   tinfoilConnected: boolean
   tinfoilEnabled: boolean
-  tinfoilEmail: string | null
 }> => {
   const rows = await db.select().from(integrationsSecretsTable).all()
 
@@ -151,6 +150,5 @@ export const getIntegrationStatus = async (
     microsoftEmail: parseEmail(microsoft?.credentials),
     tinfoilConnected: !!tinfoil?.credentials,
     tinfoilEnabled: tinfoil?.enabled === 1,
-    tinfoilEmail: parseEmail(tinfoil?.credentials),
   }
 }

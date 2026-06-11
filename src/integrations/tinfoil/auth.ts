@@ -2,11 +2,10 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-import { MisconfiguredOAuthError, type OAuthConfig, type OAuthTokens } from '@/lib/auth'
+import { MisconfiguredOAuthError, type OAuthConfig, type OAuthTokens, type OAuthUserInfo } from '@/lib/auth'
 import type { HttpClient } from '@/lib/http'
 import { getOAuthRedirectUri } from '@/lib/oauth-redirect'
 import type { AuthProviderBackendConfig } from '@/types'
-import type { TinfoilUserInfo } from './types'
 
 /**
  * Tinfoil OAuth 2.1 public client (PKCE, no secret): the app forwards the
@@ -79,8 +78,11 @@ export const exchangeCodeForTokens = async (
     .json<OAuthTokens>()
 }
 
-/** No userinfo endpoint for Tinfoil — return a static identity (see {@link TinfoilUserInfo}). */
-export const getUserInfo = async (_accessToken: string): Promise<TinfoilUserInfo> => {
+/**
+ * No userinfo endpoint for Tinfoil (the `inference:api` scope carries no
+ * identity) — return a static identity in the provider-agnostic shape.
+ */
+export const getUserInfo = async (_accessToken: string): Promise<OAuthUserInfo> => {
   return {
     id: 'tinfoil',
     email: '',

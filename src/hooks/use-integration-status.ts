@@ -15,12 +15,6 @@ export type IntegrationStatus = {
   microsoftEmail: string | null
   tinfoilConnected: boolean
   tinfoilEnabled: boolean
-  tinfoilEmail: string | null
-  availableProviders: {
-    google: boolean
-    microsoft: boolean
-    tinfoil: boolean
-  }
 }
 
 export const useIntegrationStatus = (): {
@@ -32,18 +26,7 @@ export const useIntegrationStatus = (): {
 
   const query = useQuery({
     queryKey: ['integrationStatus'],
-    queryFn: async (): Promise<IntegrationStatus> => {
-      const status = await getIntegrationStatus(db)
-
-      return {
-        ...status,
-        availableProviders: {
-          google: status.googleConnected,
-          microsoft: status.microsoftConnected,
-          tinfoil: status.tinfoilConnected,
-        },
-      }
-    },
+    queryFn: (): Promise<IntegrationStatus> => getIntegrationStatus(db),
   })
 
   return {

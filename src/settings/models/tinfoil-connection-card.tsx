@@ -14,13 +14,19 @@ import { useIntegrationStatus } from '@/hooks/use-integration-status'
 import { useOAuthLocationCallback } from '@/hooks/use-oauth-location-callback'
 import { getOAuthCredentials } from '@/integrations/oauth-credentials'
 import { revokeTokens as revokeTinfoilTokens } from '@/integrations/tinfoil/auth'
-import { tinfoilManageSubscriptionUrl } from '@/integrations/tinfoil/constants'
 import { openExternalUrl } from '@/lib/open-external-url'
 import { useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 
 /** Scroll target for the "Connect/Enable Tinfoil" affordances on model cards. */
 export const tinfoilConnectionCardId = 'tinfoil-connection'
+
+/**
+ * Where a connected user manages or cancels their Tinfoil subscription. A plain
+ * outbound link: the Stripe portal URL is only reachable behind Tinfoil's own
+ * dashboard session, which this client does not hold.
+ */
+const tinfoilManageSubscriptionUrl = 'https://dash.tinfoil.sh/?tab=billing'
 
 /**
  * Mirrors the plan gate in `src/ai/fetch.ts`: the plan-billed path requires the
@@ -54,7 +60,6 @@ export const TinfoilConnectionCard = () => {
   const { data: integrationStatusData } = useIntegrationStatus()
   const isConnected = integrationStatusData?.tinfoilConnected ?? false
   const isEnabled = integrationStatusData?.tinfoilEnabled ?? false
-  const userEmail = integrationStatusData?.tinfoilEmail || undefined
 
   const handleDisconnect = async () => {
     try {
@@ -102,7 +107,7 @@ export const TinfoilConnectionCard = () => {
           <div className="flex flex-col gap-1 min-w-0">
             <div className="flex items-center gap-2">
               <TinfoilIcon />
-              <CardTitle className="text-base">{isConnected && userEmail ? userEmail : 'Tinfoil'}</CardTitle>
+              <CardTitle className="text-base">Tinfoil</CardTitle>
             </div>
             <p className="text-sm text-muted-foreground">{tinfoilCardDescription(isConnected, isEnabled)}</p>
           </div>
