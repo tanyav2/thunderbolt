@@ -44,7 +44,7 @@ describe('withExclusiveLock', () => {
     })
     const following = withExclusiveLock('rejecting-lock', async () => 'recovered')
 
-    expect(failing).rejects.toThrow('task failed')
+    await expect(failing).rejects.toThrow('task failed')
     expect(await following).toBe('recovered')
   })
 })
