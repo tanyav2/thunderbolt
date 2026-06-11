@@ -56,6 +56,7 @@ describe('useIntegrationStatus', () => {
         microsoftEmail: null,
         tinfoilConnected: false,
         tinfoilEnabled: false,
+        tinfoilRequiresReauth: false,
       })
       expect(result.current.error).toBeNull()
     })
@@ -83,6 +84,7 @@ describe('useIntegrationStatus', () => {
         microsoftEmail: null,
         tinfoilConnected: false,
         tinfoilEnabled: false,
+        tinfoilRequiresReauth: false,
       })
     })
   })
@@ -109,6 +111,7 @@ describe('useIntegrationStatus', () => {
         microsoftEmail: null,
         tinfoilConnected: false,
         tinfoilEnabled: false,
+        tinfoilRequiresReauth: false,
       })
     })
   })
@@ -136,6 +139,7 @@ describe('useIntegrationStatus', () => {
         microsoftEmail: null,
         tinfoilConnected: false,
         tinfoilEnabled: false,
+        tinfoilRequiresReauth: false,
       })
     })
   })

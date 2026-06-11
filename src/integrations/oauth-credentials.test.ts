@@ -125,4 +125,55 @@ describe('ensureValidOAuthToken', () => {
     const stored = await getIntegrationCredentials(getDb(), 'tinfoil')
     expect(stored?.credentials.refresh_token).toBe('rotating-2')
   })
+
+  /** Mock HTTP client whose /refresh always fails with the given status. */
+  const failingHttpClient = (status: number, onCall?: () => void) =>
+    createClient({
+      prefixUrl: 'http://localhost/',
+      fetch: async () => {
+        onCall?.()
+        return new Response(JSON.stringify({ error: 'Token refresh failed: invalid_grant' }), {
+          status,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      },
+    })
+
+  it('marks reauth_required when the IdP definitively rejects the refresh grant', async () => {
+    const expired = { access_token: 'old.access', refresh_token: 'revoked.token', expires_at: Date.now() - 60_000 }
+    await saveIntegrationCredentials(getDb(), 'tinfoil', expired, true)
+
+    await expect(ensureValidOAuthToken(failingHttpClient(400), 'tinfoil', expired)).rejects.toThrow()
+
+    const stored = await getIntegrationCredentials(getDb(), 'tinfoil')
+    expect(stored?.credentials.reauth_required).toBe(true)
+    // The credential itself is preserved so the UI can show "reconnect", not "connect".
+    expect(stored?.credentials.refresh_token).toBe('revoked.token')
+  })
+
+  it('does not mark reauth_required on transient refresh failures', async () => {
+    const expired = { access_token: 'old.access', refresh_token: 'good.token', expires_at: Date.now() - 60_000 }
+    await saveIntegrationCredentials(getDb(), 'tinfoil', expired, true)
+
+    await expect(ensureValidOAuthToken(failingHttpClient(503), 'tinfoil', expired)).rejects.toThrow()
+
+    const stored = await getIntegrationCredentials(getDb(), 'tinfoil')
+    expect(stored?.credentials.reauth_required).toBeUndefined()
+  })
+
+  it('skips the refresh entirely once reauth is required', async () => {
+    const broken = {
+      access_token: 'old.access',
+      refresh_token: 'spent.token',
+      expires_at: Date.now() - 60_000,
+      reauth_required: true,
+    }
+    await saveIntegrationCredentials(getDb(), 'tinfoil', broken, true)
+
+    let refreshCalls = 0
+    const client = failingHttpClient(400, () => refreshCalls++)
+
+    await expect(ensureValidOAuthToken(client, 'tinfoil', broken)).rejects.toThrow('reconnect')
+    expect(refreshCalls).toBe(0)
+  })
 })

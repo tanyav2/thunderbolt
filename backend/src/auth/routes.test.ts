@@ -100,6 +100,39 @@ describe('Authentication Routes', () => {
       const response = await unauthApp.handle(new Request('http://localhost/auth/tinfoil/config'))
       expect(response.status).toBe(401)
     })
+
+    it('should reject unauthenticated requests to Tinfoil exchange', async () => {
+      const response = await unauthApp.handle(
+        new Request('http://localhost/auth/tinfoil/exchange', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code: 'test', code_verifier: 'test', redirect_uri: 'http://localhost' }),
+        }),
+      )
+      expect(response.status).toBe(401)
+    })
+
+    it('should reject unauthenticated requests to Tinfoil refresh', async () => {
+      const response = await unauthApp.handle(
+        new Request('http://localhost/auth/tinfoil/refresh', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refresh_token: 'test' }),
+        }),
+      )
+      expect(response.status).toBe(401)
+    })
+
+    it('should reject unauthenticated requests to Tinfoil revoke', async () => {
+      const response = await unauthApp.handle(
+        new Request('http://localhost/auth/tinfoil/revoke', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refresh_token: 'test' }),
+        }),
+      )
+      expect(response.status).toBe(401)
+    })
   })
 
   describe('Google OAuth', () => {

@@ -58,6 +58,7 @@ export const useTinfoilVerification = (
   const { data: integrationStatus } = useIntegrationStatus()
   const tinfoilConnected = integrationStatus?.tinfoilConnected ?? false
   const tinfoilEnabled = integrationStatus?.tinfoilEnabled ?? false
+  const tinfoilRequiresReauth = integrationStatus?.tinfoilRequiresReauth ?? false
 
   const isTinfoil = model?.provider === 'tinfoil'
   const modelId = model?.id ?? null
@@ -78,7 +79,7 @@ export const useTinfoilVerification = (
   // for them those signals are excluded — otherwise every OAuth/cloud change
   // would needlessly re-attest and reset a status that gates sending.
   const enclaveKey = isSystem
-    ? JSON.stringify([modelId, cloudUrl, tinfoilConnected, tinfoilEnabled])
+    ? JSON.stringify([modelId, cloudUrl, tinfoilConnected, tinfoilEnabled, tinfoilRequiresReauth])
     : JSON.stringify([modelId])
   const [prevEnclaveKey, setPrevEnclaveKey] = useState(enclaveKey)
   if (enclaveKey !== prevEnclaveKey) {

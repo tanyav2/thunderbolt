@@ -123,6 +123,30 @@ describe('TinfoilConnectionCard — Tinfoil SKU surface', () => {
     expect(screen.getByRole('button', { name: /manage subscription/i })).toBeInTheDocument()
   })
 
+  it('surfaces a reconnect prompt when the refresh grant was rejected', async () => {
+    await saveIntegrationCredentials(
+      getDb(),
+      'tinfoil',
+      {
+        access_token: 'test-access',
+        refresh_token: 'spent-refresh',
+        expires_at: Date.now() - 60_000,
+        reauth_required: true,
+        profile: { email: '', name: 'Tinfoil' },
+      },
+      true,
+    )
+    renderCard(createMockAuthClient({ session: authedSession }))
+    await flushQueries()
+
+    expect(screen.getByText(/connection expired/i)).toBeInTheDocument()
+    expect(screen.queryByText(/models run on your plan/i)).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /reconnect tinfoil/i })).toBeInTheDocument()
+    // Still connected, so subscription management and disconnect stay available.
+    expect(screen.getByRole('button', { name: /manage subscription/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /disconnect/i })).toBeInTheDocument()
+  })
+
   it('opens the Tinfoil dashboard billing page from Manage subscription', async () => {
     await seedConnectedTinfoil()
     const originalOpen = window.open

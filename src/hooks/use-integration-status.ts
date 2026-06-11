@@ -15,6 +15,7 @@ export type IntegrationStatus = {
   microsoftEmail: string | null
   tinfoilConnected: boolean
   tinfoilEnabled: boolean
+  tinfoilRequiresReauth: boolean
 }
 
 export const useIntegrationStatus = (): {

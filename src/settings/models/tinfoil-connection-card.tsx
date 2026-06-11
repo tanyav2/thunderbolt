@@ -30,11 +30,15 @@ const tinfoilManageSubscriptionUrl = 'https://dash.tinfoil.sh/?tab=billing'
 
 /**
  * Mirrors the plan gate in `src/ai/fetch.ts`: the plan-billed path requires the
- * integration connected AND enabled.
+ * integration connected AND enabled — and a credential whose refresh grant the
+ * IdP rejected (revoked, lapsed plan) needs a reconnect before it counts.
  */
-const tinfoilCardDescription = (connected: boolean, enabled: boolean): string => {
+const tinfoilCardDescription = (connected: boolean, enabled: boolean, requiresReauth: boolean): string => {
   if (!connected) {
     return 'Power Tinfoil’s confidential models with your own plan. Connecting walks you through subscribing.'
+  }
+  if (requiresReauth) {
+    return 'Connection expired — Tinfoil models use the managed service until you reconnect.'
   }
   if (enabled) {
     return 'Connected — Tinfoil models run on your plan.'
@@ -60,6 +64,7 @@ export const TinfoilConnectionCard = () => {
   const { data: integrationStatusData } = useIntegrationStatus()
   const isConnected = integrationStatusData?.tinfoilConnected ?? false
   const isEnabled = integrationStatusData?.tinfoilEnabled ?? false
+  const requiresReauth = integrationStatusData?.tinfoilRequiresReauth ?? false
 
   const handleDisconnect = async () => {
     try {
@@ -109,7 +114,9 @@ export const TinfoilConnectionCard = () => {
               <TinfoilIcon />
               <CardTitle className="text-base">Tinfoil</CardTitle>
             </div>
-            <p className="text-sm text-muted-foreground">{tinfoilCardDescription(isConnected, isEnabled)}</p>
+            <p className="text-sm text-muted-foreground">
+              {tinfoilCardDescription(isConnected, isEnabled, requiresReauth)}
+            </p>
           </div>
 
           <CardAction className="flex items-center gap-2">
@@ -121,7 +128,7 @@ export const TinfoilConnectionCard = () => {
           </CardAction>
         </CardHeader>
 
-        {!isConnected && (
+        {(!isConnected || requiresReauth) && (
           <CardContent>
             <ConnectProviderButton
               provider="tinfoil"
@@ -132,7 +139,7 @@ export const TinfoilConnectionCard = () => {
               }}
               returnContext="/settings/models"
               className="w-full"
-              connectLabel="Connect Tinfoil"
+              connectLabel={requiresReauth ? 'Reconnect Tinfoil' : 'Connect Tinfoil'}
             />
           </CardContent>
         )}

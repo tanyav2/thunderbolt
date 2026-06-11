@@ -156,11 +156,14 @@ export const selectActiveTinfoilClientKind = (
 export const getActiveTinfoilClient = async (model: Model): Promise<SecureClient> => {
   const oauthRow = model.isSystem ? await getIntegrationCredentials(getDb(), 'tinfoil') : null
   const credentials = oauthRow?.enabled ? oauthRow.credentials : null
-  // Mirror createModel's fallback: an expired token with no refresh token can
-  // never serve inference directly, so select managed for it — still without
-  // refreshing anything. A refresh that fails only at send time remains
-  // unknowable here; that residual case is accepted to keep this rotation-free.
-  const hasUsableOAuth = Boolean(credentials && (isTokenFresh(credentials.expires_at) || credentials.refresh_token))
+  // Mirror createModel's fallback: an expired token with no refresh token, or
+  // one whose refresh grant the IdP already rejected, can never serve inference
+  // directly, so select managed for it — still without refreshing anything.
+  // A refresh that fails only at send time remains unknowable here; that
+  // residual case is accepted to keep this rotation-free.
+  const hasUsableOAuth = Boolean(
+    credentials && !credentials.reauth_required && (isTokenFresh(credentials.expires_at) || credentials.refresh_token),
+  )
   return selectActiveTinfoilClientKind(model, hasUsableOAuth) === 'managed'
     ? getSystemTinfoilClient()
     : getTinfoilClient()
@@ -360,7 +363,10 @@ export const createModel = async (modelConfig: Model, getProxyFetch: () => Fetch
       // sending, and bodies stay end-to-end encrypted.
       if (modelConfig.isSystem && httpClient) {
         const oauthRow = await getIntegrationCredentials(getDb(), 'tinfoil')
-        if (oauthRow?.enabled && oauthRow.credentials) {
+        // A credential whose refresh grant was already rejected goes straight
+        // to the managed path — replaying it can't succeed, and the broken
+        // state is surfaced on the Models page instead.
+        if (oauthRow?.enabled && oauthRow.credentials && !oauthRow.credentials.reauth_required) {
           try {
             const accessToken = await ensureValidOAuthToken(httpClient, 'tinfoil', oauthRow.credentials)
             const client = await getTinfoilClient()

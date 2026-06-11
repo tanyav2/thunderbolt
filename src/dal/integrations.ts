@@ -11,6 +11,9 @@ type IntegrationCredentials = {
   access_token: string
   refresh_token?: string
   expires_at?: number
+  /** Set when the IdP definitively rejected the refresh grant — see
+   *  `OAuthCredentials.reauth_required` in `src/integrations/oauth-credentials.ts`. */
+  reauth_required?: boolean
   profile?: {
     email: string
     name: string
@@ -111,16 +114,18 @@ export const deleteIntegrationCredentials = async (db: AnyDrizzleDatabase, provi
   await db.delete(integrationsSecretsTable).where(eq(integrationsSecretsTable.provider, provider))
 }
 
-const parseEmail = (raw: string | null | undefined): string | null => {
+const parseCredentials = (raw: string | null | undefined): IntegrationCredentials | null => {
   if (!raw) {
     return null
   }
   try {
-    return (JSON.parse(raw) as IntegrationCredentials).profile?.email ?? null
+    return JSON.parse(raw) as IntegrationCredentials
   } catch {
     return null
   }
 }
+
+const parseEmail = (raw: string | null | undefined): string | null => parseCredentials(raw)?.profile?.email ?? null
 
 /** Get connection/enabled status for all integration providers. */
 export const getIntegrationStatus = async (
@@ -134,6 +139,7 @@ export const getIntegrationStatus = async (
   microsoftEmail: string | null
   tinfoilConnected: boolean
   tinfoilEnabled: boolean
+  tinfoilRequiresReauth: boolean
 }> => {
   const rows = await db.select().from(integrationsSecretsTable).all()
 
@@ -150,5 +156,6 @@ export const getIntegrationStatus = async (
     microsoftEmail: parseEmail(microsoft?.credentials),
     tinfoilConnected: !!tinfoil?.credentials,
     tinfoilEnabled: tinfoil?.enabled === 1,
+    tinfoilRequiresReauth: parseCredentials(tinfoil?.credentials)?.reauth_required === true,
   }
 }
