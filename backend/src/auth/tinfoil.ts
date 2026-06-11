@@ -7,7 +7,7 @@ import { createAuthMacro } from '@/auth/elysia-plugin'
 import { getSettings, isOAuthRedirectUriAllowed } from '@/config/settings'
 import { safeErrorHandler } from '@/middleware/error-handling'
 import { Elysia, t } from 'elysia'
-import { oauthTokenResponseSchema, type OAuthTokenResponse } from './types'
+import { mapUpstreamTokenStatus, oauthTokenResponseSchema, type OAuthTokenResponse } from './types'
 
 const tinfoilTokenUrl = 'https://api.tinfoil.sh/oauth/token'
 const tinfoilRevokeUrl = 'https://api.tinfoil.sh/oauth/revoke'
@@ -18,8 +18,9 @@ type StatusSetter = { status?: number | string }
 
 /**
  * POST a grant to Tinfoil's token endpoint and normalize the result to the
- * shared OAuthTokenResponse shape. Upstream rejections become 400s carrying the
- * upstream message; network failures and malformed 200s throw to
+ * shared OAuthTokenResponse shape. Definitive upstream rejections become 400s
+ * carrying the upstream message; transient upstream failures become 502s (see
+ * mapUpstreamTokenStatus); network failures and malformed 200s throw to
  * safeErrorHandler. `fallbackRefreshToken` covers a refresh response that omits
  * rotation (exchange passes none — a missing refresh_token stays null).
  */
@@ -40,7 +41,7 @@ const proxyTokenGrant = async (
     const errorData = await response.json().catch(() => ({}))
     const errorMsg = errorData.error_description || errorData.error || `HTTP ${response.status}`
     console.error(`Tinfoil token ${grant} failed:`, errorMsg)
-    set.status = 400
+    set.status = mapUpstreamTokenStatus(response.status)
     return { error: `Token ${grant} failed: ${errorMsg}` }
   }
 

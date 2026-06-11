@@ -7,7 +7,7 @@ import { createAuthMacro } from '@/auth/elysia-plugin'
 import { getSettings, isOAuthRedirectUriAllowed } from '@/config/settings'
 import { safeErrorHandler } from '@/middleware/error-handling'
 import { Elysia, t } from 'elysia'
-import { codeRequestSchema, refreshRequestSchema, type OAuthTokenResponse } from './types'
+import { codeRequestSchema, mapUpstreamTokenStatus, refreshRequestSchema, type OAuthTokenResponse } from './types'
 
 const googleTokenUrl = 'https://oauth2.googleapis.com/token'
 
@@ -74,7 +74,7 @@ export const createGoogleAuthRoutes = (auth: Auth, fetchFn: typeof fetch = globa
             const errorMsg = errorData.error_description || `HTTP ${response.status}`
             console.error('Google token exchange failed:', errorMsg)
 
-            set.status = 400
+            set.status = mapUpstreamTokenStatus(response.status)
             return {
               error: `Token exchange failed: ${errorMsg}`,
             }
@@ -145,7 +145,7 @@ export const createGoogleAuthRoutes = (auth: Auth, fetchFn: typeof fetch = globa
             const errorMsg = errorData.error_description || `HTTP ${response.status}`
             console.error('Google token refresh failed:', errorMsg)
 
-            set.status = 400
+            set.status = mapUpstreamTokenStatus(response.status)
             return {
               error: `Token refresh failed: ${errorMsg}`,
             }

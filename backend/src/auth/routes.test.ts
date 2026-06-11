@@ -338,6 +338,36 @@ describe('Authentication Routes', () => {
       expect(sent.body.has('client_secret')).toBe(false)
     })
 
+    it('returns 400 when the IdP definitively rejects the refresh grant', async () => {
+      mockFetch.mockClear()
+      mockFetch.mockResolvedValueOnce(
+        createMockOAuthResponse(400, { error: 'invalid_grant', error_description: 'refresh token revoked' }),
+      )
+      const response = await app.handle(
+        new Request('http://localhost/auth/tinfoil/refresh', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refresh_token: 'revoked.refresh.token' }),
+        }),
+      )
+      expect(response.status).toBe(400)
+      const body = await response.json()
+      expect(body.error).toContain('refresh token revoked')
+    })
+
+    it('returns 502 for transient upstream failures so clients never treat them as revocation', async () => {
+      mockFetch.mockClear()
+      mockFetch.mockResolvedValueOnce(createMockOAuthResponse(503, { error: 'temporarily_unavailable' }))
+      const response = await app.handle(
+        new Request('http://localhost/auth/tinfoil/refresh', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refresh_token: 'good.refresh.token' }),
+        }),
+      )
+      expect(response.status).toBe(502)
+    })
+
     it('revokes the token and reports success', async () => {
       mockFetch.mockClear()
       mockFetch.mockResolvedValueOnce(createMockOAuthResponse(200, {}))

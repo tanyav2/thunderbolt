@@ -20,9 +20,11 @@ export type OAuthCredentials = {
 }
 
 /**
- * Whether a refresh failure is a definitive grant rejection (the backend
- * proxies upstream `invalid_grant`-style errors as 400) rather than a
- * transient one (network, 5xx, 503 unconfigured) that may succeed on retry.
+ * Whether a refresh failure is a definitive grant rejection rather than a
+ * transient one that may succeed on retry. The backend proxy guarantees the
+ * distinction (see mapUpstreamTokenStatus in backend/src/auth/types.ts):
+ * upstream `invalid_grant`-style rejections are 400, while IdP outages,
+ * network failures, and an unconfigured provider are 5xx.
  */
 const isRefreshRejected = (error: unknown): boolean => error instanceof HttpError && error.response.status === 400
 
