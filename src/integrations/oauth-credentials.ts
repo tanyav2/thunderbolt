@@ -42,9 +42,8 @@ export const isTokenFresh = (expiresAt: number | undefined, now: number = Date.n
  * Web Locks API exists): rotating providers (Tinfoil) revoke the entire token
  * family when a spent refresh token is replayed, so two concurrent refreshes
  * (parallel sends, other tabs sharing the same local DB) must never race.
- * Inside the lock the stored credentials
- * are re-read, so a refresh completed by another holder is reused instead of
- * replaying its consumed refresh token.
+ * Inside the lock the stored credentials are re-read, so a refresh completed
+ * by another holder is reused instead of replaying its consumed refresh token.
  */
 export const ensureValidOAuthToken = async (
   httpClient: HttpClient,
