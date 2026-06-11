@@ -28,7 +28,7 @@ export type OAuthConfig = {
 type MissingPart = 'both' | 'secret'
 
 /** User-facing display names for OAuth providers. */
-export const providerLabels: Record<OAuthProvider, string> = {
+export const providerLabels: Readonly<Record<OAuthProvider, string>> = {
   google: 'Google',
   microsoft: 'Microsoft',
   tinfoil: 'Tinfoil',
