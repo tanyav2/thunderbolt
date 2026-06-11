@@ -23,6 +23,7 @@
     "security": {
       "csp": {
         "default-src": "'self' tauri: asset:",
+        "frame-src": "'self' https://verification-center.tinfoil.sh",
         "connect-src": "'self' ipc: http://ipc.localhost https: wss: ws://localhost:8000 http://localhost:8000 http://localhost:11434",
         "img-src": "'self' asset: data: https://api.thunderbolt.io",
         "font-src": "'self' data:",

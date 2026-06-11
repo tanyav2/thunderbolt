@@ -37,6 +37,16 @@ export const MicrosoftIcon = () => (
   </svg>
 )
 
+/** Tinfoil brand mark; currentColor follows the active theme. */
+export const TinfoilIcon = () => (
+  <svg className="w-4 h-4" viewBox="0 0 960 960" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path
+      d="M955.4,718.23l-674.69,205.77L6.34,708.97,268.9,35.01l686.5,683.22ZM164.94,665.52l143.05,112.11,397.97-121.37-387.26-385.41-153.76,394.66Z"
+      fill="currentColor"
+    />
+  </svg>
+)
+
 /**
  * Gmail icon - Google's email service
  */

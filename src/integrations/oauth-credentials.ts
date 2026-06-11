@@ -5,13 +5,28 @@
 import { getIntegrationCredentials, updateIntegrationCredentials } from '@/dal'
 import { getDb } from '@/db/database'
 import { refreshAccessToken, type OAuthProvider } from '@/lib/auth'
-import type { HttpClient } from '@/lib/http'
+import { HttpError, type HttpClient } from '@/lib/http'
+import { withExclusiveLock } from '@/lib/web-locks'
 
 export type OAuthCredentials = {
   access_token: string
   refresh_token?: string
   expires_at?: number
+  /** Set when the IdP definitively rejected the refresh grant (revoked or
+   *  spent token family, lapsed plan). Cleared by reconnecting, which saves
+   *  fresh credentials. While set, token use is skipped instead of replaying
+   *  a refresh token the IdP already refused. */
+  reauth_required?: boolean
 }
+
+/**
+ * Whether a refresh failure is a definitive grant rejection rather than a
+ * transient one that may succeed on retry. The backend proxy guarantees the
+ * distinction (see mapUpstreamTokenStatus in backend/src/auth/types.ts):
+ * upstream `invalid_grant`-style rejections are 400, while IdP outages,
+ * network failures, and an unconfigured provider are 5xx.
+ */
+const isRefreshRejected = (error: unknown): boolean => error instanceof HttpError && error.response.status === 400
 
 /**
  * Retrieve stored OAuth credentials for the given provider.
@@ -36,6 +51,13 @@ export const isTokenFresh = (expiresAt: number | undefined, now: number = Date.n
 /**
  * Ensure that we have a valid OAuth access token, refreshing it if necessary.
  * If refreshed, the stored credentials are updated automatically.
+ *
+ * Refreshes are serialized through an exclusive lock (origin-wide where the
+ * Web Locks API exists): rotating providers (Tinfoil) revoke the entire token
+ * family when a spent refresh token is replayed, so two concurrent refreshes
+ * (parallel sends, other tabs sharing the same local DB) must never race.
+ * Inside the lock the stored credentials are re-read, so a refresh completed
+ * by another holder is reused instead of replaying its consumed refresh token.
  */
 export const ensureValidOAuthToken = async (
   httpClient: HttpClient,
@@ -46,19 +68,40 @@ export const ensureValidOAuthToken = async (
     return credentials.access_token
   }
 
-  if (!credentials.refresh_token) {
-    throw new Error('Access token expired and no refresh token available')
-  }
+  return withExclusiveLock(`oauth-refresh-${provider}`, async (): Promise<string> => {
+    const db = getDb()
+    const stored = await getIntegrationCredentials(db, provider)
+    const current = stored?.credentials ?? credentials
+    if (isTokenFresh(current.expires_at)) {
+      return current.access_token
+    }
 
-  const newTokens = await refreshAccessToken(httpClient, provider, credentials.refresh_token)
-  const updated: OAuthCredentials = {
-    ...credentials,
-    access_token: newTokens.access_token,
-    expires_at: Date.now() + newTokens.expires_in * 1000,
-  }
+    if (current.reauth_required) {
+      throw new Error(`${provider} authorization expired — reconnect the integration`)
+    }
 
-  const db = getDb()
-  await updateIntegrationCredentials(db, provider, updated)
+    if (!current.refresh_token) {
+      throw new Error('Access token expired and no refresh token available')
+    }
 
-  return updated.access_token
+    try {
+      const newTokens = await refreshAccessToken(httpClient, provider, current.refresh_token)
+      const updated: OAuthCredentials = {
+        ...current,
+        access_token: newTokens.access_token,
+        // Rotating providers (Tinfoil) replace the refresh token on every use.
+        refresh_token: newTokens.refresh_token ?? current.refresh_token,
+        expires_at: Date.now() + newTokens.expires_in * 1000,
+      }
+
+      await updateIntegrationCredentials(db, provider, updated)
+
+      return updated.access_token
+    } catch (error) {
+      if (isRefreshRejected(error)) {
+        await updateIntegrationCredentials(db, provider, { ...current, reauth_required: true })
+      }
+      throw error
+    }
+  })
 }

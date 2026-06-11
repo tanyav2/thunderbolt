@@ -18,6 +18,15 @@ export const oauthTokenResponseSchema = z.object({
 export type OAuthTokenResponse = z.infer<typeof oauthTokenResponseSchema>
 
 /**
+ * Map an IdP token-endpoint failure to the proxy's response status. Upstream
+ * 400 is a definitive grant rejection (RFC 6749 §5.2 `invalid_grant` et al.)
+ * and stays 400 — clients treat it as "reconnect required". Anything else
+ * (5xx outage, 429, 401 client-config) is upstream trouble a client may
+ * retry, surfaced as 502 so it is never mistaken for a revoked grant.
+ */
+export const mapUpstreamTokenStatus = (upstreamStatus: number): 400 | 502 => (upstreamStatus === 400 ? 400 : 502)
+
+/**
  * Request body schema for exchanging authorization codes
  */
 export const codeRequestSchema = z.object({

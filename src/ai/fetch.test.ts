@@ -5,7 +5,7 @@
 import { describe, expect, it, mock } from 'bun:test'
 import type { MCPClient, NamedMCPClient } from '@/lib/mcp-provider'
 import type { Tool } from 'ai'
-import { mergeMcpTools, sanitizeToolPrefix } from './fetch'
+import { mergeMcpTools, sanitizeToolPrefix, selectActiveTinfoilClientKind } from './fetch'
 
 /** Mirror the `MCPClientError` the SDK throws after a transport drop. The
  *  runtime instance `name` is `'MCPClientError'` (the `AI_MCPClientError`
@@ -179,5 +179,23 @@ describe('mergeMcpTools', () => {
     const { summary } = await mergeMcpTools({}, [empty], async () => null)
 
     expect(summary).toBeUndefined()
+  })
+})
+
+describe('selectActiveTinfoilClientKind', () => {
+  // The whole point of the fix: OAuth-direct selection depends ONLY on whether
+  // an enabled Tinfoil OAuth credential is present — never on whether the caller
+  // happened to pass an HttpClient. These cases pin that contract.
+  it('routes a system model with an enabled OAuth credential to the direct enclave', () => {
+    expect(selectActiveTinfoilClientKind({ isSystem: 1 }, true)).toBe('direct')
+  })
+
+  it('routes a system model without OAuth to the managed backend proxy', () => {
+    expect(selectActiveTinfoilClientKind({ isSystem: 1 }, false)).toBe('managed')
+  })
+
+  it('routes a BYOK (non-system) model to the direct client regardless of OAuth', () => {
+    expect(selectActiveTinfoilClientKind({ isSystem: 0 }, false)).toBe('direct')
+    expect(selectActiveTinfoilClientKind({ isSystem: 0 }, true)).toBe('direct')
   })
 })

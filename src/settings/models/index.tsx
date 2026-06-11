@@ -3,6 +3,7 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 import { createModel, getTinfoilClient } from '@/ai/fetch'
+import { ModelIcon } from '@/components/model-icon'
 import { ModificationIndicator } from '@/components/modification-indicator'
 import {
   AlertDialog,
@@ -35,6 +36,7 @@ import { StatusCard } from '@/components/ui/status-card'
 import { Switch } from '@/components/ui/switch'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { useDatabase } from '@/contexts'
+import { useIntegrationStatus } from '@/hooks/use-integration-status'
 import { createModel as createModelDAL, deleteModel, getAllModels, resetModelToDefault, updateModel } from '@/dal'
 import { defaultModels } from '@/defaults/models'
 import { isModelModified } from '@/defaults/utils'
@@ -47,9 +49,10 @@ import { useQuery } from '@powersync/tanstack-react-query'
 import { toCompilableQuery } from '@powersync/drizzle-driver'
 import { generateText } from 'ai'
 import { http } from '@/lib/http'
-import { AlertTriangle, Check, Cpu, Loader2, Lock, Pen, Plus, Trash2, X } from 'lucide-react'
+import { AlertTriangle, Check, Cpu, Loader2, Pen, Plus, ShieldCheck, Trash2, X } from 'lucide-react'
 import { useEffect, useMemo, useReducer, useRef, useState, type KeyboardEvent } from 'react'
 import { useForm } from 'react-hook-form'
+import { TinfoilConnectionCard, tinfoilConnectionCardId } from './tinfoil-connection-card'
 import { v7 as uuidv7 } from 'uuid'
 import { z } from 'zod'
 
@@ -346,6 +349,10 @@ const EditModelModal = ({
 export default function ModelsPage() {
   const db = useDatabase()
   const getProxyFetch = useProxyFetchGetter()
+  const { data: integrationStatusData } = useIntegrationStatus()
+  const tinfoilConnected = Boolean(integrationStatusData?.tinfoilConnected)
+  // Mirrors the plan gate in `src/ai/fetch.ts`: plan-billed only when connected AND enabled.
+  const tinfoilPlanActive = Boolean(integrationStatusData?.tinfoilConnected && integrationStatusData?.tinfoilEnabled)
   const [state, dispatch] = useReducer(modelReducer, initialState)
   const [editingModel, setEditingModel] = useState<Model | null>(null)
   const {
@@ -844,10 +851,6 @@ export default function ModelsPage() {
     }
   }
 
-  const getModelInitial = (model: Model) => {
-    return model.name[0].toUpperCase()
-  }
-
   const handleDeleteModel = (modelId: string) => {
     deleteModelMutation.mutate(modelId)
   }
@@ -1149,6 +1152,8 @@ export default function ModelsPage() {
         </Dialog>
       </PageHeader>
 
+      <TinfoilConnectionCard />
+
       <div className="grid gap-4">
         {models.map((model) => {
           const isEnabled = model.enabled === 1
@@ -1159,23 +1164,11 @@ export default function ModelsPage() {
               <CardHeader className="py-0">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3 min-w-0 flex-1">
-                    <div className="flex items-center justify-center bg-primary text-primary-foreground size-8 rounded-md font-medium flex-shrink-0">
-                      {getModelInitial(model)}
-                    </div>
+                    <ModelIcon model={model} />
                     <div className="min-w-0 flex-1">
-                      <CardTitle className="text-lg font-medium flex flex-row items-center gap-2">
-                        {!!model.isConfidential && (
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Lock className="size-3.5" />
-                              </TooltipTrigger>
-                              <TooltipContent side="bottom">
-                                <p>Encrypted</p>
-                              </TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                        )}
+                      {/* items-baseline (not items-center): ModificationIndicator pads the name
+                          below the baseline for its underline, which skews box-centering. */}
+                      <CardTitle className="text-lg font-medium flex flex-row items-baseline gap-2">
                         {needsApiKey(model) && (
                           <TooltipProvider>
                             <Tooltip>
@@ -1197,6 +1190,9 @@ export default function ModelsPage() {
                         >
                           {model.name}
                         </ModificationIndicator>
+                        {!!model.isConfidential && (
+                          <ShieldCheck className="size-3.5 text-green-600 dark:text-green-500 flex-shrink-0" />
+                        )}
                       </CardTitle>
                       <p className="text-sm text-muted-foreground">
                         {getProviderDisplay(model.provider)} - {model.model}
@@ -1258,7 +1254,35 @@ export default function ModelsPage() {
                       </div>
                     )}
                     {model.provider === 'thunderbolt' && (
-                      <div className="text-sm text-muted-foreground">Uses Thunderbolt cloud service</div>
+                      <div className="text-sm text-muted-foreground">Uses Thunderbolt cloud service.</div>
+                    )}
+                    {model.provider === 'tinfoil' && model.isSystem === 1 && (
+                      <div className="text-sm text-muted-foreground">
+                        {tinfoilPlanActive ? (
+                          'Powered by your connected Tinfoil plan.'
+                        ) : (
+                          <>
+                            Runs on the managed Tinfoil service.{' '}
+                            <button
+                              type="button"
+                              onClick={() =>
+                                document
+                                  .getElementById(tinfoilConnectionCardId)
+                                  ?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                              }
+                              className="text-foreground underline underline-offset-2 hover:no-underline"
+                            >
+                              {tinfoilConnected ? 'Enable Tinfoil' : 'Connect Tinfoil'}
+                            </button>{' '}
+                            to power it with your plan.
+                          </>
+                        )}
+                      </div>
+                    )}
+                    {!!model.isConfidential && (
+                      <div className="text-sm text-muted-foreground">
+                        All conversations are processed privately in secure cloud hardware.
+                      </div>
                     )}
                   </div>
                 </CardContent>

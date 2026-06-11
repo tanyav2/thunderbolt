@@ -54,10 +54,9 @@ describe('useIntegrationStatus', () => {
         microsoftConnected: false,
         microsoftEnabled: false,
         microsoftEmail: null,
-        availableProviders: {
-          google: false,
-          microsoft: false,
-        },
+        tinfoilConnected: false,
+        tinfoilEnabled: false,
+        tinfoilRequiresReauth: false,
       })
       expect(result.current.error).toBeNull()
     })
@@ -83,10 +82,9 @@ describe('useIntegrationStatus', () => {
         microsoftConnected: false,
         microsoftEnabled: false,
         microsoftEmail: null,
-        availableProviders: {
-          google: true,
-          microsoft: false,
-        },
+        tinfoilConnected: false,
+        tinfoilEnabled: false,
+        tinfoilRequiresReauth: false,
       })
     })
   })
@@ -111,10 +109,9 @@ describe('useIntegrationStatus', () => {
         microsoftConnected: true,
         microsoftEnabled: true,
         microsoftEmail: null,
-        availableProviders: {
-          google: false,
-          microsoft: true,
-        },
+        tinfoilConnected: false,
+        tinfoilEnabled: false,
+        tinfoilRequiresReauth: false,
       })
     })
   })
@@ -140,10 +137,9 @@ describe('useIntegrationStatus', () => {
         microsoftConnected: true,
         microsoftEnabled: true,
         microsoftEmail: null,
-        availableProviders: {
-          google: true,
-          microsoft: true,
-        },
+        tinfoilConnected: false,
+        tinfoilEnabled: false,
+        tinfoilRequiresReauth: false,
       })
     })
   })

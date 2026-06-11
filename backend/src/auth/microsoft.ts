@@ -7,7 +7,7 @@ import { createAuthMacro } from '@/auth/elysia-plugin'
 import { getSettings, isOAuthRedirectUriAllowed } from '@/config/settings'
 import { safeErrorHandler } from '@/middleware/error-handling'
 import { Elysia, t } from 'elysia'
-import { codeRequestSchema, refreshRequestSchema, type OAuthTokenResponse } from './types'
+import { codeRequestSchema, mapUpstreamTokenStatus, refreshRequestSchema, type OAuthTokenResponse } from './types'
 
 const microsoftTokenUrl = 'https://login.microsoftonline.com/common/oauth2/v2.0/token'
 // Must match scopes requested by the frontend (see integrations/microsoft/auth.ts)
@@ -77,7 +77,7 @@ export const createMicrosoftAuthRoutes = (auth: Auth, fetchFn: typeof fetch = gl
             const errorMsg = errorData.error_description || `HTTP ${response.status}`
             console.error('Microsoft token exchange failed:', errorMsg)
 
-            set.status = 400
+            set.status = mapUpstreamTokenStatus(response.status)
             return {
               error: `Token exchange failed: ${errorMsg}`,
             }
@@ -149,7 +149,7 @@ export const createMicrosoftAuthRoutes = (auth: Auth, fetchFn: typeof fetch = gl
             const errorMsg = errorData.error_description || `HTTP ${response.status}`
             console.error('Microsoft token refresh failed:', errorMsg)
 
-            set.status = 400
+            set.status = mapUpstreamTokenStatus(response.status)
             return {
               error: `Token refresh failed: ${errorMsg}`,
             }

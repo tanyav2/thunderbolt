@@ -18,11 +18,10 @@ import { type OAuthProvider } from '@/lib/auth'
 import { useDatabase } from '@/contexts'
 import { deleteIntegrationCredentials, setIntegrationEnabled, updateSettings } from '@/dal'
 import { useIntegrationStatus } from '@/hooks/use-integration-status'
-import { useOAuthConnect } from '@/hooks/use-oauth-connect'
+import { useOAuthLocationCallback } from '@/hooks/use-oauth-location-callback'
 import { useSettings } from '@/hooks/use-settings'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { useLocation, useNavigate } from 'react-router'
+import { useMemo, useState, type ReactNode } from 'react'
 
 type Integration = {
   id: string
@@ -43,13 +42,11 @@ const ThunderboltProIcon = () => (
 
 export default function IntegrationsPage() {
   const db = useDatabase()
-  const location = useLocation()
-  const navigate = useNavigate()
 
   const [error, setError] = useState<string | null>(null)
-  const [isProcessingCallback, setIsProcessingCallback] = useState(() => {
-    const oauth = (location.state as { oauth?: unknown } | null)?.oauth
-    return !!oauth
+  const { isProcessingCallback } = useOAuthLocationCallback({
+    returnContext: 'integrations',
+    onError: (err) => setError(err.message),
   })
 
   const queryClient = useQueryClient()
@@ -100,36 +97,6 @@ export default function IntegrationsPage() {
       },
     ]
   }, [integrationSettings.integrationsProIsEnabled.value, integrationStatusData, proStatus?.isProUser])
-
-  const { processCallback } = useOAuthConnect({
-    onError: (err) => {
-      setError(err.message)
-    },
-    returnContext: 'integrations',
-  })
-
-  // Handle OAuth callback when navigated back from /oauth/callback
-  useEffect(() => {
-    const oauth = (location.state as { oauth?: { code?: string; state?: string; error?: string } } | null)?.oauth
-    if (!oauth) {
-      return
-    }
-
-    const handleCallback = async () => {
-      setIsProcessingCallback(true)
-      try {
-        await processCallback(oauth)
-      } catch (err) {
-        console.error('Failed to complete OAuth:', err)
-      } finally {
-        setIsProcessingCallback(false)
-        navigate('.', { replace: true, state: null })
-      }
-    }
-
-    handleCallback()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [location.state])
 
   const handleGetPro = async () => {
     // For now, just show an alert since this is a placeholder
@@ -185,11 +152,13 @@ export default function IntegrationsPage() {
         {integrations.map((integration) => (
           <Card key={integration.id} className="border border-border">
             <CardHeader className="grid grid-cols-[1fr_auto] items-center gap-x-4 gap-y-0 py-2">
-              <div className="flex items-center gap-2">
-                {integration.icon}
-                <CardTitle className="text-base">
-                  {integration.isConnected && integration.userEmail ? integration.userEmail : integration.name}
-                </CardTitle>
+              <div className="flex flex-col gap-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  {integration.icon}
+                  <CardTitle className="text-base">
+                    {integration.isConnected && integration.userEmail ? integration.userEmail : integration.name}
+                  </CardTitle>
+                </div>
               </div>
 
               <CardAction className="flex items-center gap-2">
@@ -265,7 +234,7 @@ export default function IntegrationsPage() {
             )}
 
             {integration.isConnected && integration.provider !== 'thunderbolt-pro' && (
-              <CardFooter>
+              <CardFooter className="gap-2">
                 <Button variant="outline" size="sm" onClick={() => handleDisconnect(integration)} className="ml-auto">
                   Disconnect
                 </Button>
