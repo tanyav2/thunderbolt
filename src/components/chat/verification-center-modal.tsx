@@ -11,6 +11,9 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 // The hosted Verification Center widget — visually identical to what Tinfoil
 // ships and what tinfoil-webapp embeds. We feed it the verification document
 // over postMessage rather than rebuilding the (detailed) attestation UI.
+// This origin is allowlisted in src-tauri/tauri.conf.json `frame-src` — the
+// packaged Tauri CSP blocks all other cross-origin frames, so changing the
+// URL here requires updating that allowlist too.
 const verificationCenterBaseUrl = 'https://verification-center.tinfoil.sh'
 const verificationCenterOrigin = new URL(verificationCenterBaseUrl).origin
 
