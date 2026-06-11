@@ -44,8 +44,9 @@ const isOnline = () => (typeof navigator !== 'undefined' ? navigator.onLine : tr
  * Gated on `provider === 'tinfoil'` — NOT `isConfidential`: confidential
  * thunderbolt-provider models (e.g. GPT OSS) have no client-side SecureClient,
  * so they stay `idle`. Resolves the same attested SecureClient inference uses
- * and re-reads when the model, cloudUrl, or Tinfoil OAuth connection changes
- * (each can swap the enclave that answers) — never per message.
+ * and re-reads when the model changes — plus, for system models, when cloudUrl
+ * or the Tinfoil OAuth connection changes (each can swap the enclave that
+ * answers) — never per message.
  *
  * `getActiveTinfoilClient` is injectable for tests.
  */
@@ -60,6 +61,7 @@ export const useTinfoilVerification = (
 
   const isTinfoil = model?.provider === 'tinfoil'
   const modelId = model?.id ?? null
+  const isSystem = model?.isSystem === 1
 
   const [state, setState] = useState<VerificationState>(() => resetState(isTinfoil))
   const [retryNonce, setRetryNonce] = useState(0)
@@ -70,7 +72,14 @@ export const useTinfoilVerification = (
   // status through which a send could slip. retryNonce (a same-enclave refresh)
   // is deliberately excluded so it doesn't flash the chip back to "verifying".
   // React's documented "adjust state during render" pattern.
-  const enclaveKey = JSON.stringify([modelId, cloudUrl, tinfoilConnected, tinfoilEnabled])
+  //
+  // cloudUrl and OAuth state can swap the enclave only for system models (the
+  // direct ↔ managed selection); BYOK models always use the direct client, so
+  // for them those signals are excluded — otherwise every OAuth/cloud change
+  // would needlessly re-attest and reset a status that gates sending.
+  const enclaveKey = isSystem
+    ? JSON.stringify([modelId, cloudUrl, tinfoilConnected, tinfoilEnabled])
+    : JSON.stringify([modelId])
   const [prevEnclaveKey, setPrevEnclaveKey] = useState(enclaveKey)
   if (enclaveKey !== prevEnclaveKey) {
     setPrevEnclaveKey(enclaveKey)
@@ -155,10 +164,10 @@ export const useTinfoilVerification = (
     return () => {
       cancelled = true
     }
-    // `tinfoilConnected` / `tinfoilEnabled` aren't read in the body but switch
-    // getActiveTinfoilClient between the direct and managed enclaves (different
-    // verification documents), so they must re-trigger attestation.
-  }, [isTinfoil, modelId, cloudUrl, tinfoilConnected, tinfoilEnabled, retryNonce])
+    // enclaveKey folds in modelId plus — for system models only — cloudUrl and
+    // the Tinfoil OAuth state, which switch getActiveTinfoilClient between the
+    // direct and managed enclaves (different verification documents).
+  }, [isTinfoil, enclaveKey, retryNonce])
 
   return { ...state, retry }
 }

@@ -238,6 +238,31 @@ describe('useTinfoilVerification', () => {
     }
   })
 
+  it('does not re-attest a BYOK (non-system) model when cloudUrl changes', async () => {
+    // BYOK models always use the direct enclave client — cloudUrl and Tinfoil
+    // OAuth state never swap their enclave, so changing them must not reset a
+    // verified status (which gates sending) or trigger another attestation.
+    const originalCloudUrl = useLocalSettingsStore.getState().cloudUrl
+    const getClient = mock(async () => fakeClient(true))
+    try {
+      const { result } = renderVerification(tinfoilModel({ isSystem: 0 }), getClient)
+      await flush()
+      expect(result.current.status).toBe('verified')
+
+      const callsBefore = getClient.mock.calls.length
+      act(() => {
+        useLocalSettingsStore.setState({ cloudUrl: `${originalCloudUrl}#switched` })
+      })
+
+      expect(result.current.status).toBe('verified')
+      await flush()
+      expect(result.current.status).toBe('verified')
+      expect(getClient.mock.calls.length).toBe(callsBefore)
+    } finally {
+      useLocalSettingsStore.setState({ cloudUrl: originalCloudUrl })
+    }
+  })
+
   it('fails (not stuck verifying) after exhausting retries while offline', async () => {
     const onLine = Object.getOwnPropertyDescriptor(navigator, 'onLine')
     Object.defineProperty(navigator, 'onLine', { value: false, configurable: true })

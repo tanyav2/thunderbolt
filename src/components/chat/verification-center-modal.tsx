@@ -41,12 +41,12 @@ type VerificationCenterFrameProps = {
 const VerificationCenterFrame = ({ verification, onClose, isDarkMode }: VerificationCenterFrameProps) => {
   const iframeRef = useRef<HTMLIFrameElement>(null)
   const [isReady, setIsReady] = useState(false)
-  const { doc, retry } = verification
+  const { doc } = verification
 
   // Keep callbacks/values the message listener needs in refs so the listener
   // effect mounts once (stable deps) and never reads a stale closure.
-  const retryRef = useRef(retry)
-  retryRef.current = retry
+  const verificationRef = useRef(verification)
+  verificationRef.current = verification
   const onCloseRef = useRef(onClose)
   onCloseRef.current = onClose
 
@@ -61,7 +61,21 @@ const VerificationCenterFrame = ({ verification, onClose, isDarkMode }: Verifica
       } else if (type === 'TINFOIL_VERIFICATION_CENTER_CLOSED') {
         onCloseRef.current()
       } else if (type === 'TINFOIL_REQUEST_VERIFICATION_DOCUMENT') {
-        retryRef.current()
+        // Re-send the document we already have — a request from the widget is
+        // usually an iframe-side init race, not a reason to re-attest the
+        // enclave. While verification is still in flight (no doc yet) the
+        // doc-push effect below delivers it as soon as it lands. But after a
+        // terminal failure with no document there is nothing to push and no
+        // other retry path, so re-attest.
+        const { doc: currentDoc, status, retry } = verificationRef.current
+        if (currentDoc) {
+          iframeRef.current?.contentWindow?.postMessage(
+            { type: 'TINFOIL_VERIFICATION_DOCUMENT', document: currentDoc },
+            verificationCenterOrigin,
+          )
+        } else if (status === 'failed') {
+          retry()
+        }
       }
     }
     window.addEventListener('message', handleMessage)

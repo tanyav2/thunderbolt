@@ -20,7 +20,7 @@ import {
   getModelProfile,
   getSettings,
 } from '@/dal'
-import { ensureValidOAuthToken } from '@/integrations/oauth-credentials'
+import { ensureValidOAuthToken, isTokenFresh } from '@/integrations/oauth-credentials'
 import { extractLastUserText, resolveSkillTokenInstructions } from '@/skills/resolve-skill-system-messages'
 import { getDb } from '@/db/database'
 import { getLocalSetting } from '@/stores/local-settings-store'
@@ -155,8 +155,13 @@ export const selectActiveTinfoilClientKind = (
  */
 export const getActiveTinfoilClient = async (model: Model): Promise<SecureClient> => {
   const oauthRow = model.isSystem ? await getIntegrationCredentials(getDb(), 'tinfoil') : null
-  const hasEnabledOAuth = Boolean(oauthRow?.enabled && oauthRow.credentials)
-  return selectActiveTinfoilClientKind(model, hasEnabledOAuth) === 'managed'
+  const credentials = oauthRow?.enabled ? oauthRow.credentials : null
+  // Mirror createModel's fallback: an expired token with no refresh token can
+  // never serve inference directly, so select managed for it — still without
+  // refreshing anything. A refresh that fails only at send time remains
+  // unknowable here; that residual case is accepted to keep this rotation-free.
+  const hasUsableOAuth = Boolean(credentials && (isTokenFresh(credentials.expires_at) || credentials.refresh_token))
+  return selectActiveTinfoilClientKind(model, hasUsableOAuth) === 'managed'
     ? getSystemTinfoilClient()
     : getTinfoilClient()
 }
