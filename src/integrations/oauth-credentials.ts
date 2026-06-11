@@ -6,6 +6,7 @@ import { getIntegrationCredentials, updateIntegrationCredentials } from '@/dal'
 import { getDb } from '@/db/database'
 import { refreshAccessToken, type OAuthProvider } from '@/lib/auth'
 import type { HttpClient } from '@/lib/http'
+import { withExclusiveLock } from '@/lib/web-locks'
 
 export type OAuthCredentials = {
   access_token: string
@@ -37,10 +38,11 @@ export const isTokenFresh = (expiresAt: number | undefined, now: number = Date.n
  * Ensure that we have a valid OAuth access token, refreshing it if necessary.
  * If refreshed, the stored credentials are updated automatically.
  *
- * Refreshes are serialized through an origin-wide Web Lock: rotating providers
- * (Tinfoil) revoke the entire token family when a spent refresh token is
- * replayed, so two concurrent refreshes (parallel sends, other tabs sharing
- * the same local DB) must never race. Inside the lock the stored credentials
+ * Refreshes are serialized through an exclusive lock (origin-wide where the
+ * Web Locks API exists): rotating providers (Tinfoil) revoke the entire token
+ * family when a spent refresh token is replayed, so two concurrent refreshes
+ * (parallel sends, other tabs sharing the same local DB) must never race.
+ * Inside the lock the stored credentials
  * are re-read, so a refresh completed by another holder is reused instead of
  * replaying its consumed refresh token.
  */
@@ -53,7 +55,7 @@ export const ensureValidOAuthToken = async (
     return credentials.access_token
   }
 
-  return navigator.locks.request(`oauth-refresh-${provider}`, async (): Promise<string> => {
+  return withExclusiveLock(`oauth-refresh-${provider}`, async (): Promise<string> => {
     const db = getDb()
     const stored = await getIntegrationCredentials(db, provider)
     const current = stored?.credentials ?? credentials
@@ -77,5 +79,5 @@ export const ensureValidOAuthToken = async (
     await updateIntegrationCredentials(db, provider, updated)
 
     return updated.access_token
-  }) as Promise<string>
+  })
 }
