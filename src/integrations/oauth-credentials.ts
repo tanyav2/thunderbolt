@@ -36,6 +36,13 @@ export const isTokenFresh = (expiresAt: number | undefined, now: number = Date.n
 /**
  * Ensure that we have a valid OAuth access token, refreshing it if necessary.
  * If refreshed, the stored credentials are updated automatically.
+ *
+ * Refreshes are serialized through an origin-wide Web Lock: rotating providers
+ * (Tinfoil) revoke the entire token family when a spent refresh token is
+ * replayed, so two concurrent refreshes (parallel sends, other tabs sharing
+ * the same local DB) must never race. Inside the lock the stored credentials
+ * are re-read, so a refresh completed by another holder is reused instead of
+ * replaying its consumed refresh token.
  */
 export const ensureValidOAuthToken = async (
   httpClient: HttpClient,
@@ -46,21 +53,29 @@ export const ensureValidOAuthToken = async (
     return credentials.access_token
   }
 
-  if (!credentials.refresh_token) {
-    throw new Error('Access token expired and no refresh token available')
-  }
+  return navigator.locks.request(`oauth-refresh-${provider}`, async (): Promise<string> => {
+    const db = getDb()
+    const stored = await getIntegrationCredentials(db, provider)
+    const current = stored?.credentials ?? credentials
+    if (isTokenFresh(current.expires_at)) {
+      return current.access_token
+    }
 
-  const newTokens = await refreshAccessToken(httpClient, provider, credentials.refresh_token)
-  const updated: OAuthCredentials = {
-    ...credentials,
-    access_token: newTokens.access_token,
-    // Rotating providers (Tinfoil) replace the refresh token on every use.
-    refresh_token: newTokens.refresh_token ?? credentials.refresh_token,
-    expires_at: Date.now() + newTokens.expires_in * 1000,
-  }
+    if (!current.refresh_token) {
+      throw new Error('Access token expired and no refresh token available')
+    }
 
-  const db = getDb()
-  await updateIntegrationCredentials(db, provider, updated)
+    const newTokens = await refreshAccessToken(httpClient, provider, current.refresh_token)
+    const updated: OAuthCredentials = {
+      ...current,
+      access_token: newTokens.access_token,
+      // Rotating providers (Tinfoil) replace the refresh token on every use.
+      refresh_token: newTokens.refresh_token ?? current.refresh_token,
+      expires_at: Date.now() + newTokens.expires_in * 1000,
+    }
 
-  return updated.access_token
+    await updateIntegrationCredentials(db, provider, updated)
+
+    return updated.access_token
+  }) as Promise<string>
 }

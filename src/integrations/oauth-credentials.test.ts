@@ -91,4 +91,38 @@ describe('ensureValidOAuthToken', () => {
     expect(stored?.credentials.access_token).toBe('new.access')
     expect(stored?.credentials.refresh_token).toBe('rotating-2')
   })
+
+  it('serializes concurrent refreshes so a spent refresh token is never replayed', async () => {
+    const expired = { access_token: 'old.access', refresh_token: 'rotating-1', expires_at: Date.now() - 60_000 }
+    await saveIntegrationCredentials(getDb(), 'tinfoil', expired, true)
+
+    let refreshCalls = 0
+    const client = createClient({
+      prefixUrl: 'http://localhost/',
+      fetch: async () => {
+        refreshCalls++
+        return new Response(
+          JSON.stringify({
+            access_token: 'new.access',
+            refresh_token: `rotating-${refreshCalls + 1}`,
+            expires_in: 900,
+            token_type: 'Bearer',
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        )
+      },
+    })
+
+    const tokens = await Promise.all([
+      ensureValidOAuthToken(client, 'tinfoil', expired),
+      ensureValidOAuthToken(client, 'tinfoil', expired),
+      ensureValidOAuthToken(client, 'tinfoil', expired),
+    ])
+
+    expect(refreshCalls).toBe(1)
+    expect(tokens).toEqual(['new.access', 'new.access', 'new.access'])
+
+    const stored = await getIntegrationCredentials(getDb(), 'tinfoil')
+    expect(stored?.credentials.refresh_token).toBe('rotating-2')
+  })
 })

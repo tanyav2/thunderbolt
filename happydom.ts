@@ -24,5 +24,22 @@ if (typeof globalThis.Buffer === 'undefined') {
   globalThis.Buffer = Buffer
 }
 
+// happy-dom ships `navigator.locks` as null — provide a minimal exclusive
+// Web Locks implementation so code that serializes work through
+// `navigator.locks.request` (e.g. OAuth token refresh) runs under test.
+const lockQueues = new Map<string, Promise<unknown>>()
+const webLocksPolyfill = {
+  request: (name: string, callback: (lock: { name: string; mode: 'exclusive' }) => unknown): Promise<unknown> => {
+    const previous = lockQueues.get(name) ?? Promise.resolve()
+    const run = previous.then(() => callback({ name, mode: 'exclusive' }))
+    lockQueues.set(
+      name,
+      run.catch(() => undefined),
+    )
+    return run
+  },
+}
+Object.defineProperty(navigator, 'locks', { value: webLocksPolyfill, configurable: true })
+
 // Fake timers are now managed in testing-library.ts
 // This file just sets up the DOM environment
